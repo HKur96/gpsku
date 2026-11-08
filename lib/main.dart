@@ -24,6 +24,9 @@ import 'features/reports/domain/repositories/reports_repository.dart';
 import 'features/commands/data/datasources/commands_remote_data_source.dart';
 import 'features/commands/data/repositories/commands_repository_impl.dart';
 import 'features/commands/domain/repositories/commands_repository.dart';
+import 'features/geofences/data/datasources/geofences_remote_data_source.dart';
+import 'features/geofences/data/repositories/geofences_repository_impl.dart';
+import 'features/geofences/domain/repositories/geofences_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +91,13 @@ void main() async {
     remoteDataSource: commandsRemoteDataSource,
   );
 
+  final geofencesRemoteDataSource = GeofencesRemoteDataSourceImpl(
+    dioClient: dioClient,
+  );
+  final geofencesRepository = GeofencesRepositoryImpl(
+    remoteDataSource: geofencesRemoteDataSource,
+  );
+
   final appRouter = AppRouter(authProvider: authProvider);
 
   // Validate initial authentication status in background
@@ -118,6 +128,10 @@ void main() async {
             value: commandsRemoteDataSource,
           ),
           Provider<CommandsRepository>.value(value: commandsRepository),
+          Provider<GeofencesRemoteDataSource>.value(
+            value: geofencesRemoteDataSource,
+          ),
+          Provider<GeofencesRepository>.value(value: geofencesRepository),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,
           ),
