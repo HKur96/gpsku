@@ -63,8 +63,27 @@ class EventStreamService {
 
     if (parsed.isEmpty) return;
 
-    // Insert newest events at the beginning (index 0)
-    _bufferedEvents.insertAll(0, parsed);
+    // Filter out duplicates based on event.id to prevent double alerting on reconnect
+    final existingIds = _bufferedEvents
+        .map((e) => e.id)
+        .where((id) => id > 0)
+        .toSet();
+    final uniqueNewEvents = <EventModel>[];
+    for (final event in parsed) {
+      if (event.id > 0 && existingIds.contains(event.id)) {
+        AppLogger.info(
+          'EventStreamService: Ignoring duplicate event #${event.id}',
+        );
+        continue;
+      }
+      uniqueNewEvents.add(event);
+      if (event.id > 0) existingIds.add(event.id);
+    }
+
+    if (uniqueNewEvents.isEmpty) return;
+
+    // Insert newest unique events at the beginning (index 0)
+    _bufferedEvents.insertAll(0, uniqueNewEvents);
 
     // Limit buffer to maxBufferSize
     if (_bufferedEvents.length > maxBufferSize) {
@@ -73,10 +92,10 @@ class EventStreamService {
 
     // Dispatch to stream subscribers
     if (!_eventsBatchController.isClosed) {
-      _eventsBatchController.add(List.unmodifiable(parsed));
+      _eventsBatchController.add(List.unmodifiable(uniqueNewEvents));
     }
     if (!_singleEventController.isClosed) {
-      for (final event in parsed) {
+      for (final event in uniqueNewEvents) {
         _singleEventController.add(event);
       }
     }
@@ -85,15 +104,29 @@ class EventStreamService {
   /// Manually ingest a list of events (useful for tests or replay).
   void ingestEvents(List<EventModel> events) {
     if (events.isEmpty) return;
-    _bufferedEvents.insertAll(0, events);
+    final existingIds = _bufferedEvents
+        .map((e) => e.id)
+        .where((id) => id > 0)
+        .toSet();
+    final uniqueNewEvents = <EventModel>[];
+    for (final event in events) {
+      if (event.id > 0 && existingIds.contains(event.id)) {
+        continue;
+      }
+      uniqueNewEvents.add(event);
+      if (event.id > 0) existingIds.add(event.id);
+    }
+    if (uniqueNewEvents.isEmpty) return;
+
+    _bufferedEvents.insertAll(0, uniqueNewEvents);
     if (_bufferedEvents.length > maxBufferSize) {
       _bufferedEvents.removeRange(maxBufferSize, _bufferedEvents.length);
     }
     if (!_eventsBatchController.isClosed) {
-      _eventsBatchController.add(List.unmodifiable(events));
+      _eventsBatchController.add(List.unmodifiable(uniqueNewEvents));
     }
     if (!_singleEventController.isClosed) {
-      for (final event in events) {
+      for (final event in uniqueNewEvents) {
         _singleEventController.add(event);
       }
     }

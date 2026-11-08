@@ -160,5 +160,36 @@ void main() {
         throwsUnsupportedError,
       );
     });
+
+    test(
+      'TC-ESS-07: deduplicates events based on id avoiding double alerts',
+      () async {
+        int batchCount = 0;
+        service.eventsBatchStream.listen((_) => batchCount++);
+
+        // Emit initial event #50
+        mockWs.emitMessage({
+          'events': [
+            {'id': 50, 'type': 'alarm', 'deviceId': 1},
+          ],
+        });
+        await Future<void>.delayed(Duration.zero);
+        expect(service.bufferedEvents.length, 1);
+        expect(batchCount, 1);
+
+        // Reconnect sends duplicate event #50 and new event #51
+        mockWs.emitMessage({
+          'events': [
+            {'id': 50, 'type': 'alarm', 'deviceId': 1}, // Duplicate
+            {'id': 51, 'type': 'deviceMoving', 'deviceId': 1}, // New
+          ],
+        });
+        await Future<void>.delayed(Duration.zero);
+
+        expect(service.bufferedEvents.length, 2);
+        expect(service.bufferedEvents.map((e) => e.id), [51, 50]);
+        expect(batchCount, 2); // Dispatched only the new event!
+      },
+    );
   });
 }

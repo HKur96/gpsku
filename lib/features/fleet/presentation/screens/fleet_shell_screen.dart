@@ -23,6 +23,9 @@ import 'package:gpsku/features/maintenance/presentation/widgets/maintenance_list
 import 'package:gpsku/features/drivers/presentation/providers/drivers_provider.dart';
 import 'package:gpsku/features/drivers/presentation/widgets/driver_list_drawer.dart';
 import 'package:gpsku/features/notifications/domain/services/event_stream_service.dart';
+import 'package:gpsku/features/notifications/presentation/providers/notifications_provider.dart';
+import 'package:gpsku/features/notifications/presentation/widgets/emergency_alert_banner.dart';
+import 'package:gpsku/features/notifications/presentation/widgets/notifications_drawer.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -104,6 +107,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
       drivers = context.watch<DriversProvider>();
     } on ProviderNotFoundException {
       drivers = null;
+    }
+    NotificationsProvider? notifications;
+    try {
+      notifications = context.watch<NotificationsProvider>();
+    } on ProviderNotFoundException {
+      notifications = null;
     }
     final user = auth.currentUser;
 
@@ -198,6 +207,22 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   DriverListDrawer.show(context);
                 },
               ),
+            if (notifications != null)
+              IconButton(
+                key: const Key('notifications_drawer_action_button'),
+                icon: Badge(
+                  isLabelVisible: notifications.unreadCount > 0,
+                  label: Text('${notifications.unreadCount}'),
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                tooltip: 'Riwayat Notifikasi',
+                onPressed: () {
+                  NotificationsDrawer.show(
+                    context,
+                    onSelectDevice: (deviceId) => _onMarkerTapped(deviceId),
+                  );
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
@@ -208,6 +233,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 geofences?.clearGeofences();
                 maintenance?.clearMaintenance();
                 drivers?.clearDrivers();
+                notifications?.clearAll();
                 try {
                   context.read<EventStreamService>().clearBuffer();
                 } on ProviderNotFoundException {
@@ -219,347 +245,370 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16.0),
+        body: Column(
           children: [
-            // User Card
-            Card(
-              elevation: 2,
-              child: Padding(
+            if (notifications != null)
+              EmergencyAlertBanner(
+                onCenterDevice: (deviceId) => _onMarkerTapped(deviceId),
+              ),
+            Expanded(
+              child: ListView(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          backgroundColor: Color(0xFF1E88E5),
-                          child: Icon(Icons.person, color: Colors.white),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // User Card
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Text(
-                                user?.name.isNotEmpty == true
-                                    ? user!.name
-                                    : 'User #${user?.id}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                              const CircleAvatar(
+                                backgroundColor: Color(0xFF1E88E5),
+                                child: Icon(Icons.person, color: Colors.white),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user?.name.isNotEmpty == true
+                                          ? user!.name
+                                          : 'User #${user?.id}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    Text(
+                                      user?.email ?? 'Unknown Email',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
+                              if (user?.administrator == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'ADMIN',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.brown,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // WebSocket Telemetry Status Card
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Real-Time Telemetry Socket',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Text(
-                                user?.email ?? 'Unknown Email',
+                                statusText,
                                 style: TextStyle(
-                                  color: Colors.grey[600],
+                                  color: statusColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Reconnect'),
+                                style: ElevatedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () {
+                                  final ws = context
+                                      .read<TraccarWebSocketService>();
+                                  ws.connect();
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Temporary Map Verification Harness for P7.3.1.1 Real Rendering Test
+                  Card(
+                    elevation: 3,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          color: Colors.blue.shade50,
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.map,
+                                size: 20,
+                                color: Color(0xFF1E88E5),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'MapLibre Verification Surface (OpenFreeMap Liberty)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
                                   fontSize: 13,
+                                  color: Color(0xFF1565C0),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        if (user?.administrator == true)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'ADMIN',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.brown,
+                        SizedBox(
+                          height: 480,
+                          child: Stack(
+                            children: [
+                              FleetMapWidget(
+                                showAttribution: true,
+                                onMapReady: (controller, cameraController) {
+                                  _cameraController = cameraController;
+                                  AppLogger.info(
+                                    '[EMULATOR_VERIFY] onMapCreated successfully fired!',
+                                  );
+                                },
+                                onStyleLoaded: (controller) {
+                                  AppLogger.info(
+                                    '[FLEET_MAP] onStyleLoaded successfully fired! Attaching FleetMarkerManager & GeofenceMapRenderer.',
+                                  );
+                                  _markerManager.attach(
+                                    controller,
+                                    fleetProvider: context
+                                        .read<LiveFleetProvider>(),
+                                  );
+                                  _geofenceRenderer.attach(
+                                    MapLibreGeofenceAdapter(controller),
+                                  );
+                                  GeofencesProvider? geofences;
+                                  try {
+                                    geofences = context
+                                        .read<GeofencesProvider>();
+                                  } on ProviderNotFoundException {
+                                    geofences = null;
+                                  }
+                                  if (geofences != null &&
+                                      geofences.geofences.isNotEmpty) {
+                                    _geofenceRenderer.renderGeofences(
+                                      geofences.geofences,
+                                    );
+                                  }
+                                },
                               ),
-                            ),
+                              if (geofences != null)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: GeofenceMapLayerToggleButton(
+                                    onToggle: (visible) {
+                                      _geofenceRenderer.setVisibility(visible);
+                                    },
+                                  ),
+                                ),
+                              if (selectedDevice != null)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: VehicleDetailSheet(
+                                    device: selectedDevice,
+                                    position: selectedPosition,
+                                    onDismiss: () => fleet.selectDevice(null),
+                                    onCommandsPressed: () {
+                                      CommandBottomSheet.show(
+                                        context,
+                                        device: selectedDevice,
+                                        position: selectedPosition,
+                                      );
+                                    },
+                                    onHistoryPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => RouteHistoryScreen(
+                                            deviceId: selectedDevice.id,
+                                            deviceName: selectedDevice.name,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    onCenterToVehicle: () {
+                                      if (selectedPosition != null &&
+                                          CameraCalculationHelper.isValidCoordinate(
+                                            selectedPosition.latitude,
+                                            selectedPosition.longitude,
+                                          )) {
+                                        _cameraController?.animateToDevice(
+                                          LatLng(
+                                            selectedPosition.latitude,
+                                            selectedPosition.longitude,
+                                          ),
+                                          verticalOffsetPixels:
+                                              VehicleDetailSheet
+                                                  .estimatedSheetHeight,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                            ],
                           ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
+                  ),
+                  const SizedBox(height: 12),
 
-            // WebSocket Telemetry Status Card
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  // Live Devices & Positions Overview
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fleet Buffer Stats (150ms Coalesced)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _StatColumn(
+                                label: 'Total Devices',
+                                value: fleet.devices.length.toString(),
+                                icon: Icons.directions_car,
+                                color: Colors.indigo,
+                              ),
+                              _StatColumn(
+                                label: 'Active Positions',
+                                value: fleet.positions.length.toString(),
+                                icon: Icons.my_location,
+                                color: Colors.teal,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Device List Preview
+                  if (fleet.devices.isNotEmpty) ...[
                     const Text(
-                      'Real-Time Telemetry Socket',
+                      'Connected Devices:',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 15,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            shape: BoxShape.circle,
+                    ...fleet.devices.values.map((device) {
+                      final position = fleet.positions[device.id];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.directions_car,
+                            color: device.isOnline ? Colors.green : Colors.grey,
+                          ),
+                          title: Text(
+                            device.name,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            position != null
+                                ? 'Speed: ${position.speedKmh.toStringAsFixed(1)} km/h | Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}'
+                                : 'No GPS fix yet',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Text(
+                            device.status.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: device.isOnline
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          statusText,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      );
+                    }),
+                  ] else ...[
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Text(
+                          'No devices reported yet.\nWaiting for telemetry packets over WebSocket...',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[500]),
                         ),
-                        const Spacer(),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('Reconnect'),
-                          style: ElevatedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: () {
-                            final ws = context.read<TraccarWebSocketService>();
-                            ws.connect();
-                          },
-                        ),
-                      ],
+                      ),
                     ),
                   ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Temporary Map Verification Harness for P7.3.1.1 Real Rendering Test
-            Card(
-              elevation: 3,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    color: Colors.blue.shade50,
-                    child: const Row(
-                      children: [
-                        Icon(Icons.map, size: 20, color: Color(0xFF1E88E5)),
-                        SizedBox(width: 8),
-                        Text(
-                          'MapLibre Verification Surface (OpenFreeMap Liberty)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Color(0xFF1565C0),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: 480,
-                    child: Stack(
-                      children: [
-                        FleetMapWidget(
-                          showAttribution: true,
-                          onMapReady: (controller, cameraController) {
-                            _cameraController = cameraController;
-                            AppLogger.info(
-                              '[EMULATOR_VERIFY] onMapCreated successfully fired!',
-                            );
-                          },
-                          onStyleLoaded: (controller) {
-                            AppLogger.info(
-                              '[FLEET_MAP] onStyleLoaded successfully fired! Attaching FleetMarkerManager & GeofenceMapRenderer.',
-                            );
-                            _markerManager.attach(
-                              controller,
-                              fleetProvider: context.read<LiveFleetProvider>(),
-                            );
-                            _geofenceRenderer.attach(
-                              MapLibreGeofenceAdapter(controller),
-                            );
-                            GeofencesProvider? geofences;
-                            try {
-                              geofences = context.read<GeofencesProvider>();
-                            } on ProviderNotFoundException {
-                              geofences = null;
-                            }
-                            if (geofences != null &&
-                                geofences.geofences.isNotEmpty) {
-                              _geofenceRenderer.renderGeofences(
-                                geofences.geofences,
-                              );
-                            }
-                          },
-                        ),
-                        if (geofences != null)
-                          Positioned(
-                            top: 12,
-                            right: 12,
-                            child: GeofenceMapLayerToggleButton(
-                              onToggle: (visible) {
-                                _geofenceRenderer.setVisibility(visible);
-                              },
-                            ),
-                          ),
-                        if (selectedDevice != null)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: VehicleDetailSheet(
-                              device: selectedDevice,
-                              position: selectedPosition,
-                              onDismiss: () => fleet.selectDevice(null),
-                              onCommandsPressed: () {
-                                CommandBottomSheet.show(
-                                  context,
-                                  device: selectedDevice,
-                                  position: selectedPosition,
-                                );
-                              },
-                              onHistoryPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => RouteHistoryScreen(
-                                      deviceId: selectedDevice.id,
-                                      deviceName: selectedDevice.name,
-                                    ),
-                                  ),
-                                );
-                              },
-                              onCenterToVehicle: () {
-                                if (selectedPosition != null &&
-                                    CameraCalculationHelper.isValidCoordinate(
-                                      selectedPosition.latitude,
-                                      selectedPosition.longitude,
-                                    )) {
-                                  _cameraController?.animateToDevice(
-                                    LatLng(
-                                      selectedPosition.latitude,
-                                      selectedPosition.longitude,
-                                    ),
-                                    verticalOffsetPixels:
-                                        VehicleDetailSheet.estimatedSheetHeight,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Live Devices & Positions Overview
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Fleet Buffer Stats (150ms Coalesced)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _StatColumn(
-                          label: 'Total Devices',
-                          value: fleet.devices.length.toString(),
-                          icon: Icons.directions_car,
-                          color: Colors.indigo,
-                        ),
-                        _StatColumn(
-                          label: 'Active Positions',
-                          value: fleet.positions.length.toString(),
-                          icon: Icons.my_location,
-                          color: Colors.teal,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Device List Preview
-            if (fleet.devices.isNotEmpty) ...[
-              const Text(
-                'Connected Devices:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              const SizedBox(height: 8),
-              ...fleet.devices.values.map((device) {
-                final position = fleet.positions[device.id];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.directions_car,
-                      color: device.isOnline ? Colors.green : Colors.grey,
-                    ),
-                    title: Text(
-                      device.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      position != null
-                          ? 'Speed: ${position.speedKmh.toStringAsFixed(1)} km/h | Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}'
-                          : 'No GPS fix yet',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: Text(
-                      device.status.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: device.isOnline ? Colors.green : Colors.grey,
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ] else ...[
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Text(
-                    'No devices reported yet.\nWaiting for telemetry packets over WebSocket...',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[500]),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),

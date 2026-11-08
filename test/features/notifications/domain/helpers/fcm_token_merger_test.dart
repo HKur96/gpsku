@@ -42,13 +42,22 @@ void main() {
     });
 
     test('TC-FTM-04: mergeTokenList enforces maxTokens sliding window', () {
-      // Default max is 3
-      final initial = [tokenA, tokenB, tokenC];
-      final result = FcmTokenMerger.mergeTokenList(initial, tokenD);
+      // Custom max 3
+      final initial3 = [tokenA, tokenB, tokenC];
+      final result3 = FcmTokenMerger.mergeTokenList(
+        initial3,
+        tokenD,
+        maxTokens: 3,
+      );
+      expect(result3, [tokenB, tokenC, tokenD]);
+      expect(result3.length, 3);
 
-      // Keeps last 2 + new token
-      expect(result, [tokenB, tokenC, tokenD]);
-      expect(result.length, 3);
+      // Default max 10
+      final tokens10 = List.generate(10, (i) => 'token_$i');
+      final result10 = FcmTokenMerger.mergeTokenList(tokens10, 'token_new');
+      expect(result10.length, 10);
+      expect(result10.first, 'token_1');
+      expect(result10.last, 'token_new');
     });
 
     test(

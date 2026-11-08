@@ -40,6 +40,8 @@ import 'features/notifications/data/datasources/notifications_remote_data_source
 import 'features/notifications/data/repositories/notifications_repository_impl.dart';
 import 'features/notifications/domain/repositories/notifications_repository.dart';
 import 'features/notifications/domain/services/event_stream_service.dart';
+import 'features/notifications/presentation/providers/notifications_provider.dart';
+import 'features/notifications/presentation/services/alarm_audio_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +141,11 @@ void main() async {
   final eventStreamService = EventStreamService(
     webSocketService: webSocketService,
   );
+  final alarmAudioService = AlarmAudioService();
+  final notificationsProvider = NotificationsProvider(
+    eventStreamService: eventStreamService,
+    alarmAudioService: alarmAudioService,
+  );
 
   final appRouter = AppRouter(authProvider: authProvider);
 
@@ -189,6 +196,12 @@ void main() async {
             value: notificationsRepository,
           ),
           Provider<EventStreamService>.value(value: eventStreamService),
+          ChangeNotifierProvider<AlarmAudioService>.value(
+            value: alarmAudioService,
+          ),
+          ChangeNotifierProvider<NotificationsProvider>.value(
+            value: notificationsProvider,
+          ),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,
           ),

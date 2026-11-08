@@ -4,7 +4,7 @@
 class FcmTokenMerger {
   FcmTokenMerger._();
 
-  static const int defaultMaxTokens = 3;
+  static const int defaultMaxTokens = 10;
 
   /// Parses any raw representation of `notificationTokens` (null, String, or List)
   /// into a sanitized, deduplicated list of trimmed strings.
