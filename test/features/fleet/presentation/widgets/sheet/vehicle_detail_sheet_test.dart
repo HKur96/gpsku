@@ -251,6 +251,34 @@ void main() {
       },
     );
 
+    testWidgets('TC-VDS-04B: Tapping Riwayat fires onHistoryPressed callback', (
+      tester,
+    ) async {
+      bool historyTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VehicleDetailSheet(
+              device: sampleDevice,
+              position: samplePosition,
+              onHistoryPressed: () => historyTapped = true,
+            ),
+          ),
+        ),
+      );
+
+      final historyButton = find.byKey(
+        const Key('vehicle_sheet_history_button'),
+      );
+      expect(historyButton, findsOneWidget);
+
+      await tester.tap(historyButton);
+      await tester.pump();
+
+      expect(historyTapped, isTrue);
+    });
+
     testWidgets(
       'TC-VDS-05: Real-time update updates metrics without widget recreation',
       (tester) async {

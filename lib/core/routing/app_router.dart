@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/fleet/presentation/screens/fleet_shell_screen.dart';
+import '../../features/reports/presentation/screens/route_history_screen.dart';
 
 /// Application router configuration using GoRouter with declarative auth redirection.
 class AppRouter {
@@ -44,6 +45,16 @@ class AppRouter {
         path: '/',
         name: 'home',
         builder: (context, state) => const FleetShellScreen(),
+      ),
+      GoRoute(
+        path: '/route-history',
+        name: 'route-history',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final deviceId = extra['deviceId'] as int? ?? 0;
+          final deviceName = extra['deviceName'] as String? ?? 'Kendaraan';
+          return RouteHistoryScreen(deviceId: deviceId, deviceName: deviceName);
+        },
       ),
     ],
   );

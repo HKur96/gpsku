@@ -11,6 +11,7 @@ import '../widgets/map/fleet_camera_controller.dart';
 import '../widgets/map/fleet_map_widget.dart';
 import '../widgets/map/fleet_marker_manager.dart';
 import '../widgets/sheet/vehicle_detail_sheet.dart';
+import 'package:gpsku/features/reports/presentation/screens/route_history_screen.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -310,6 +311,16 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                               device: selectedDevice,
                               position: selectedPosition,
                               onDismiss: () => fleet.selectDevice(null),
+                              onHistoryPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => RouteHistoryScreen(
+                                      deviceId: selectedDevice.id,
+                                      deviceName: selectedDevice.name,
+                                    ),
+                                  ),
+                                );
+                              },
                               onCenterToVehicle: () {
                                 if (selectedPosition != null &&
                                     CameraCalculationHelper.isValidCoordinate(
