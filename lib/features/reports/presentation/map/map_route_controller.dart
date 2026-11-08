@@ -36,6 +36,9 @@ abstract class MapRouteController {
   /// Adds a map symbol (marker) to the canvas.
   Future<Symbol> addSymbol(SymbolOptions options, [Map<String, dynamic>? data]);
 
+  /// Updates properties of an existing symbol.
+  Future<void> updateSymbol(Symbol symbol, SymbolOptions changes);
+
   /// Removes a single symbol.
   Future<void> removeSymbol(Symbol symbol);
 
@@ -117,6 +120,11 @@ class MapLibreRouteAdapter implements MapRouteController {
     Map<String, dynamic>? data,
   ]) {
     return _controller.addSymbol(options, data);
+  }
+
+  @override
+  Future<void> updateSymbol(Symbol symbol, SymbolOptions changes) {
+    return _controller.updateSymbol(symbol, changes);
   }
 
   @override

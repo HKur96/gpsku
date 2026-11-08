@@ -50,6 +50,8 @@ class MockRouteController implements MapRouteController {
     Map<String, dynamic>? data,
   ]) async => Symbol('mock', const SymbolOptions());
   @override
+  Future<void> updateSymbol(Symbol symbol, SymbolOptions changes) async {}
+  @override
   Future<void> removeSymbol(Symbol symbol) async {}
   @override
   Future<void> removeSymbols(Iterable<Symbol> symbols) async {}

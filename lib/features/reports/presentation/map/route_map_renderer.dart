@@ -21,6 +21,7 @@ class RouteMapRenderer {
 
   final List<Symbol> _activeSymbols = [];
   final Map<String, StopReportModel> _symbolIdToStop = {};
+  Symbol? _playbackMarkerSymbol;
   PositionModel? _currentStart;
   PositionModel? _currentEnd;
 
@@ -309,9 +310,53 @@ class RouteMapRenderer {
     }
   }
 
-  /// Safely removes route layer, source, and waypoint markers.
+  /// Updates or creates the moving simulated vehicle marker on the map canvas.
+  Future<void> updatePlaybackMarker({
+    required LatLng coordinate,
+    required double bearing,
+    String iconImage = 'car-info',
+  }) async {
+    if (!isReady) return;
+
+    try {
+      if (_playbackMarkerSymbol == null) {
+        _playbackMarkerSymbol = await _controller!.addSymbol(
+          SymbolOptions(
+            geometry: coordinate,
+            iconImage: iconImage,
+            iconRotate: bearing,
+            iconSize: 1.15,
+            iconAnchor: 'center',
+            zIndex: 20,
+          ),
+          {'type': 'playback_vehicle'},
+        );
+      } else {
+        await _controller!.updateSymbol(
+          _playbackMarkerSymbol!,
+          SymbolOptions(geometry: coordinate, iconRotate: bearing),
+        );
+      }
+    } catch (e) {
+      AppLogger.warn('RouteMapRenderer: Failed updating playback marker: $e');
+    }
+  }
+
+  /// Removes the moving vehicle playback marker symbol.
+  Future<void> removePlaybackMarker() async {
+    if (!isReady || _playbackMarkerSymbol == null) return;
+    try {
+      await _controller!.removeSymbol(_playbackMarkerSymbol!);
+      _playbackMarkerSymbol = null;
+    } catch (e) {
+      AppLogger.warn('RouteMapRenderer: Failed removing playback marker: $e');
+    }
+  }
+
+  /// Safely removes route layer, source, waypoint markers, and playback vehicle symbol.
   /// Strict ordering: Layers removed BEFORE sources to prevent native MapLibre crashes.
   Future<void> clearRoute() async {
+    await removePlaybackMarker();
     await _clearSymbols();
 
     if (!isReady) return;

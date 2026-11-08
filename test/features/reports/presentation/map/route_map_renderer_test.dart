@@ -81,6 +81,19 @@ class MockMapRouteController implements MapRouteController {
   }
 
   @override
+  Future<void> updateSymbol(Symbol symbol, SymbolOptions changes) async {
+    operationLog.add('updateSymbol:${symbol.id}');
+    final idx = symbols.indexWhere((s) => s.id == symbol.id);
+    if (idx >= 0) {
+      symbols[idx] = Symbol(
+        symbol.id,
+        symbol.options.copyWith(changes),
+        symbol.data,
+      );
+    }
+  }
+
+  @override
   Future<void> removeSymbol(Symbol symbol) async {
     operationLog.add('removeSymbol:${symbol.id}');
     symbols.removeWhere((s) => s.id == symbol.id);
@@ -428,5 +441,35 @@ void main() {
       );
       renderer.updateStyleConfig(customConfig);
     });
+
+    test(
+      'TC-RMR-14: Updates and removes moving playback vehicle symbol',
+      () async {
+        await renderer.renderRoute(positions: tPositions);
+
+        // Create playback marker
+        await renderer.updatePlaybackMarker(
+          coordinate: const LatLng(-6.2088, 106.8456),
+          bearing: 90.0,
+        );
+
+        expect(mockController.symbols.length, 3);
+        expect(
+          mockController.symbols.last.options.geometry,
+          const LatLng(-6.2088, 106.8456),
+        );
+        expect(mockController.symbols.last.options.iconRotate, 90.0);
+
+        // Update position and heading
+        await renderer.updatePlaybackMarker(
+          coordinate: const LatLng(-6.2100, 106.8500),
+          bearing: 110.0,
+        );
+
+        // Remove playback marker
+        await renderer.removePlaybackMarker();
+        expect(mockController.symbols.length, 2);
+      },
+    );
   });
 }
