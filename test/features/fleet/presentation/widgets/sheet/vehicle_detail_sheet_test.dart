@@ -18,6 +18,9 @@ import 'package:gpsku/core/errors/failures.dart';
 import 'package:gpsku/features/maintenance/data/models/maintenance_model.dart';
 import 'package:gpsku/features/maintenance/domain/repositories/maintenance_repository.dart';
 import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
+import 'package:gpsku/features/drivers/data/models/driver_model.dart';
+import 'package:gpsku/features/drivers/domain/repositories/drivers_repository.dart';
+import 'package:gpsku/features/drivers/presentation/providers/drivers_provider.dart';
 
 class FakeWebSocketService extends TraccarWebSocketService {
   final _stateController =
@@ -614,7 +617,212 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'TC-VDS-14: Displays resolved active driver information when position contains matching driverUniqueId',
+      (tester) async {
+        final mockDriverRepo = _SheetMockDriversRepo();
+        final driversProvider = DriversProvider(repository: mockDriverRepo);
+
+        const activeDriver = DriverModel(
+          id: 42,
+          name: 'Budi Santoso',
+          uniqueId: 'RFID-4242',
+          attributes: {'phone': '08123456789'},
+        );
+        mockDriverRepo.allDrivers = [activeDriver];
+        await driversProvider.fetchDrivers();
+
+        final rfidPosition = samplePosition.copyWith(
+          attributes: {'driverUniqueId': 'RFID-4242'},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<DriversProvider>.value(
+              value: driversProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: rfidPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('vehicle_sheet_driver_card')),
+          findsOneWidget,
+        );
+        expect(find.text('Budi Santoso'), findsOneWidget);
+        expect(find.text('RFID-4242'), findsOneWidget);
+        expect(find.text('08123456789'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'TC-VDS-15: Displays assigned device driver when position has no driverUniqueId',
+      (tester) async {
+        final mockDriverRepo = _SheetMockDriversRepo();
+        final driversProvider = DriversProvider(repository: mockDriverRepo);
+
+        const assignedDriver = DriverModel(
+          id: 11,
+          name: 'Agus Driver Tetap',
+          uniqueId: 'IBUTTON-11',
+        );
+        mockDriverRepo.deviceDrivers[sampleDevice.id] = [assignedDriver];
+        mockDriverRepo.allDrivers = [assignedDriver];
+        driversProvider.setDeviceDriverLinks(sampleDevice.id, [11]);
+        await driversProvider.fetchDrivers();
+
+        // Position without RFID attribute
+        final plainPosition = samplePosition.copyWith(attributes: {});
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<DriversProvider>.value(
+              value: driversProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: plainPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('vehicle_sheet_driver_card')),
+          findsOneWidget,
+        );
+        expect(find.text('Agus Driver Tetap'), findsOneWidget);
+        expect(find.text('IBUTTON-11'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'TC-VDS-16: Displays raw RFID tag when scanned card is not in driver catalog',
+      (tester) async {
+        final mockDriverRepo = _SheetMockDriversRepo();
+        final driversProvider = DriversProvider(repository: mockDriverRepo);
+        await driversProvider.fetchDrivers();
+
+        final unknownRfidPosition = samplePosition.copyWith(
+          attributes: {'driverUniqueId': 'UNREGISTERED-TAG-99'},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<DriversProvider>.value(
+              value: driversProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: unknownRfidPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('vehicle_sheet_driver_card')),
+          findsOneWidget,
+        );
+        expect(find.text('Kartu: UNREGISTERED-TAG-99'), findsOneWidget);
+        expect(find.text('UNREGISTERED-TAG-99'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'TC-VDS-17: Displays Tanpa Pengemudi when neither position RFID nor assigned driver exist',
+      (tester) async {
+        final mockDriverRepo = _SheetMockDriversRepo();
+        final driversProvider = DriversProvider(repository: mockDriverRepo);
+        await driversProvider.fetchDrivers();
+
+        final emptyPosition = samplePosition.copyWith(attributes: {});
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<DriversProvider>.value(
+              value: driversProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: emptyPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('vehicle_sheet_driver_card')),
+          findsOneWidget,
+        );
+        expect(find.text('Tanpa Pengemudi'), findsOneWidget);
+      },
+    );
   });
+}
+
+class _SheetMockDriversRepo implements DriversRepository {
+  final Map<int, List<DriverModel>> deviceDrivers = {};
+  List<DriverModel> allDrivers = [];
+
+  @override
+  Future<Either<Failure, List<DriverModel>>> getDrivers({
+    bool? all,
+    int? userId,
+    int? deviceId,
+    int? groupId,
+    CancelToken? cancelToken,
+  }) async {
+    if (deviceId != null) {
+      return Right(deviceDrivers[deviceId] ?? []);
+    }
+    return Right(allDrivers);
+  }
+
+  @override
+  Future<Either<Failure, DriverModel>> createDriver(
+    DriverModel driver, {
+    CancelToken? cancelToken,
+  }) async => Right(driver);
+
+  @override
+  Future<Either<Failure, DriverModel>> updateDriver(
+    DriverModel driver, {
+    CancelToken? cancelToken,
+  }) async => Right(driver);
+
+  @override
+  Future<Either<Failure, void>> deleteDriver(
+    int id, {
+    CancelToken? cancelToken,
+  }) async => const Right(null);
+
+  @override
+  Future<Either<Failure, void>> linkDeviceDriver({
+    required int deviceId,
+    required int driverId,
+    CancelToken? cancelToken,
+  }) async => const Right(null);
+
+  @override
+  Future<Either<Failure, void>> unlinkDeviceDriver({
+    required int deviceId,
+    required int driverId,
+    CancelToken? cancelToken,
+  }) async => const Right(null);
 }
 
 class _SheetMockMaintenanceRepo implements MaintenanceRepository {

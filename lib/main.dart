@@ -35,6 +35,7 @@ import 'features/maintenance/presentation/providers/maintenance_provider.dart';
 import 'features/drivers/data/datasources/drivers_remote_data_source.dart';
 import 'features/drivers/data/repositories/drivers_repository_impl.dart';
 import 'features/drivers/domain/repositories/drivers_repository.dart';
+import 'features/drivers/presentation/providers/drivers_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,6 +124,7 @@ void main() async {
   final driversRepository = DriversRepositoryImpl(
     remoteDataSource: driversRemoteDataSource,
   );
+  final driversProvider = DriversProvider(repository: driversRepository);
 
   final appRouter = AppRouter(authProvider: authProvider);
 
@@ -172,6 +174,7 @@ void main() async {
           ChangeNotifierProvider<MaintenanceProvider>.value(
             value: maintenanceProvider,
           ),
+          ChangeNotifierProvider<DriversProvider>.value(value: driversProvider),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,
           ),

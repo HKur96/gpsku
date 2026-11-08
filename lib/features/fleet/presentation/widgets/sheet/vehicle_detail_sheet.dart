@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:gpsku/features/drivers/data/models/driver_model.dart';
+import 'package:gpsku/features/drivers/domain/helpers/active_driver_resolver.dart';
+import 'package:gpsku/features/drivers/presentation/providers/drivers_provider.dart';
 import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/data/models/position_model.dart';
 import 'package:gpsku/features/maintenance/domain/helpers/maintenance_progress_helper.dart';
@@ -76,6 +79,11 @@ class VehicleDetailSheet extends StatelessWidget {
 
               // Quick Action Bar: Center, Commands, History
               _buildActionRow(context),
+
+              const SizedBox(height: 12),
+
+              // Driver Information Section
+              _buildDriverSection(context),
 
               const SizedBox(height: 12),
 
@@ -312,6 +320,166 @@ class VehicleDetailSheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDriverSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    DriversProvider? driversProvider;
+    try {
+      driversProvider = Provider.of<DriversProvider>(context);
+    } catch (_) {
+      driversProvider = null;
+    }
+
+    DriverModel? activeDriver;
+    if (driversProvider != null) {
+      activeDriver = driversProvider.resolveActiveDriver(position);
+      if (activeDriver == null) {
+        final deviceDrivers = driversProvider.getDriversForDevice(device.id);
+        if (deviceDrivers.isNotEmpty) {
+          activeDriver = deviceDrivers.first;
+        }
+      }
+    }
+
+    final rawRfid = ActiveDriverResolver.extractDriverUniqueId(position);
+
+    return Container(
+      key: const Key('vehicle_sheet_driver_card'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: activeDriver != null
+                ? const Color(0xFF1E88E5).withValues(alpha: 0.15)
+                : (isDark ? Colors.grey[800] : Colors.grey[200]),
+            child: Icon(
+              Icons.badge_outlined,
+              size: 18,
+              color: activeDriver != null
+                  ? const Color(0xFF1E88E5)
+                  : Colors.grey,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'PENGEMUDI',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    if (activeDriver != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        key: const Key('vehicle_sheet_driver_rfid'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFF1E88E5,
+                          ).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          activeDriver.uniqueId,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E88E5),
+                          ),
+                        ),
+                      ),
+                    ] else if (rawRfid != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        key: const Key('vehicle_sheet_driver_rfid'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          rawRfid,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFE65100),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  activeDriver != null
+                      ? activeDriver.name
+                      : (rawRfid != null
+                            ? 'Kartu: $rawRfid'
+                            : 'Tanpa Pengemudi'),
+                  key: const Key('vehicle_sheet_driver_name'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: activeDriver != null || rawRfid != null
+                        ? (isDark ? Colors.white : Colors.black87)
+                        : Colors.grey,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (activeDriver?.phone != null &&
+                    activeDriver!.phone!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.phone_outlined,
+                        size: 11,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        activeDriver.phone!,
+                        key: const Key('vehicle_sheet_driver_phone'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
