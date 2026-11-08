@@ -280,6 +280,35 @@ void main() {
     });
 
     testWidgets(
+      'TC-VDS-04C: Tapping Perintah fires onCommandsPressed callback',
+      (tester) async {
+        bool commandsTapped = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: VehicleDetailSheet(
+                device: sampleDevice,
+                position: samplePosition,
+                onCommandsPressed: () => commandsTapped = true,
+              ),
+            ),
+          ),
+        );
+
+        final commandsButton = find.byKey(
+          const Key('vehicle_sheet_commands_button'),
+        );
+        expect(commandsButton, findsOneWidget);
+
+        await tester.tap(commandsButton);
+        await tester.pump();
+
+        expect(commandsTapped, isTrue);
+      },
+    );
+
+    testWidgets(
       'TC-VDS-05: Real-time update updates metrics without widget recreation',
       (tester) async {
         var currentPosition = samplePosition;
