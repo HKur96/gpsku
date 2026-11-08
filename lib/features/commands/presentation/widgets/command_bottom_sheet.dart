@@ -57,6 +57,8 @@ class _CommandBottomSheetState extends State<CommandBottomSheet> {
 
   final TextEditingController _customDataController = TextEditingController();
   final TextEditingController _frequencyController = TextEditingController();
+  final FocusNode _customDataFocusNode = FocusNode();
+  final FocusNode _frequencyFocusNode = FocusNode();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override
@@ -69,6 +71,8 @@ class _CommandBottomSheetState extends State<CommandBottomSheet> {
   void dispose() {
     _customDataController.dispose();
     _frequencyController.dispose();
+    _customDataFocusNode.dispose();
+    _frequencyFocusNode.dispose();
     super.dispose();
   }
 
@@ -470,6 +474,9 @@ class _CommandBottomSheetState extends State<CommandBottomSheet> {
               );
             }).toList(),
             onChanged: (value) {
+              FocusScope.of(context).unfocus();
+              _customDataController.clear();
+              _frequencyController.clear();
               setState(() {
                 _selectedCommandType = value;
                 _riskAcknowledged = false;
@@ -490,6 +497,7 @@ class _CommandBottomSheetState extends State<CommandBottomSheet> {
             TextFormField(
               key: const Key('custom_command_input'),
               controller: _customDataController,
+              focusNode: _customDataFocusNode,
               decoration: InputDecoration(
                 hintText: 'Contoh: STATUS# atau RELAY,1#',
                 contentPadding: const EdgeInsets.symmetric(
@@ -518,6 +526,7 @@ class _CommandBottomSheetState extends State<CommandBottomSheet> {
             TextFormField(
               key: const Key('frequency_command_input'),
               controller: _frequencyController,
+              focusNode: _frequencyFocusNode,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 hintText: 'Contoh: 30',
