@@ -44,11 +44,14 @@ class GeofenceModel {
       (attributes['polylineDistance'] as num?)?.toDouble();
 
   /// Line width in pixels for boundary drawing on the map.
-  int? get mapLineWidth => (attributes['mapLineWidth'] as num?)?.toInt();
+  num? get mapLineWidth =>
+      (attributes['mapLineWidth'] as num?) ??
+      (attributes['map.lineWidth'] as num?);
 
   /// Line / fill opacity (0.0 to 1.0).
   double? get mapLineOpacity =>
-      (attributes['mapLineOpacity'] as num?)?.toDouble();
+      (attributes['mapLineOpacity'] as num?)?.toDouble() ??
+      (attributes['map.lineOpacity'] as num?)?.toDouble();
 
   /// Indicates whether this geofence has a POLYGON geometry.
   bool get isPolygon => area.trim().toUpperCase().startsWith('POLYGON');
