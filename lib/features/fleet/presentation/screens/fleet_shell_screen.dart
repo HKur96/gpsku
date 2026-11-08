@@ -23,6 +23,7 @@ import 'package:gpsku/features/maintenance/presentation/widgets/maintenance_list
 import 'package:gpsku/features/drivers/presentation/providers/drivers_provider.dart';
 import 'package:gpsku/features/drivers/presentation/widgets/driver_list_drawer.dart';
 import 'package:gpsku/features/notifications/domain/services/event_stream_service.dart';
+import 'package:gpsku/features/notifications/presentation/providers/notification_settings_provider.dart';
 import 'package:gpsku/features/notifications/presentation/providers/notifications_provider.dart';
 import 'package:gpsku/features/notifications/presentation/widgets/emergency_alert_banner.dart';
 import 'package:gpsku/features/notifications/presentation/widgets/notifications_drawer.dart';
@@ -234,6 +235,11 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 maintenance?.clearMaintenance();
                 drivers?.clearDrivers();
                 notifications?.clearAll();
+                try {
+                  context.read<NotificationSettingsProvider>().clearSettings();
+                } on ProviderNotFoundException {
+                  // Ignored in partial test harness
+                }
                 try {
                   context.read<EventStreamService>().clearBuffer();
                 } on ProviderNotFoundException {

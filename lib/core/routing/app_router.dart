@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/fleet/presentation/screens/fleet_shell_screen.dart';
+import '../../features/notifications/presentation/screens/notification_settings_screen.dart';
 import '../../features/reports/presentation/screens/route_history_screen.dart';
 
 /// Application router configuration using GoRouter with declarative auth redirection.
@@ -55,6 +56,11 @@ class AppRouter {
           final deviceName = extra['deviceName'] as String? ?? 'Kendaraan';
           return RouteHistoryScreen(deviceId: deviceId, deviceName: deviceName);
         },
+      ),
+      GoRoute(
+        path: '/notification-settings',
+        name: 'notification-settings',
+        builder: (context, state) => const NotificationSettingsScreen(),
       ),
     ],
   );

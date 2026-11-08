@@ -40,6 +40,7 @@ import 'features/notifications/data/datasources/notifications_remote_data_source
 import 'features/notifications/data/repositories/notifications_repository_impl.dart';
 import 'features/notifications/domain/repositories/notifications_repository.dart';
 import 'features/notifications/domain/services/event_stream_service.dart';
+import 'features/notifications/presentation/providers/notification_settings_provider.dart';
 import 'features/notifications/presentation/providers/notifications_provider.dart';
 import 'features/notifications/presentation/services/alarm_audio_service.dart';
 
@@ -146,6 +147,9 @@ void main() async {
     eventStreamService: eventStreamService,
     alarmAudioService: alarmAudioService,
   );
+  final notificationSettingsProvider = NotificationSettingsProvider(
+    repository: notificationsRepository,
+  );
 
   final appRouter = AppRouter(authProvider: authProvider);
 
@@ -201,6 +205,9 @@ void main() async {
           ),
           ChangeNotifierProvider<NotificationsProvider>.value(
             value: notificationsProvider,
+          ),
+          ChangeNotifierProvider<NotificationSettingsProvider>.value(
+            value: notificationSettingsProvider,
           ),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,

@@ -7,10 +7,13 @@ import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/presentation/providers/live_fleet_provider.dart';
 import 'package:gpsku/features/notifications/data/models/event_model.dart';
 import 'package:gpsku/features/notifications/domain/services/event_stream_service.dart';
+import 'package:gpsku/features/notifications/presentation/providers/notification_settings_provider.dart';
 import 'package:gpsku/features/notifications/presentation/providers/notifications_provider.dart';
+import 'package:gpsku/features/notifications/presentation/screens/notification_settings_screen.dart';
 import 'package:gpsku/features/notifications/presentation/services/alarm_audio_service.dart';
 import 'package:gpsku/features/notifications/presentation/widgets/notifications_drawer.dart';
 import 'package:provider/provider.dart';
+import '../providers/notification_settings_provider_test.dart';
 
 class MockTraccarWebSocketService extends TraccarWebSocketService {
   MockTraccarWebSocketService()
@@ -19,12 +22,17 @@ class MockTraccarWebSocketService extends TraccarWebSocketService {
 
 Widget createTestWidget({
   required NotificationsProvider notifProvider,
+  NotificationSettingsProvider? settingsProvider,
   LiveFleetProvider? fleetProvider,
   void Function(int deviceId)? onSelectDevice,
 }) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<NotificationsProvider>.value(value: notifProvider),
+      if (settingsProvider != null)
+        ChangeNotifierProvider<NotificationSettingsProvider>.value(
+          value: settingsProvider,
+        ),
       if (fleetProvider != null)
         ChangeNotifierProvider<LiveFleetProvider>.value(value: fleetProvider),
     ],
@@ -264,6 +272,55 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(NotificationsDrawer), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'TC-NDW-08: tapping settings button pops drawer and opens NotificationSettingsScreen',
+      (tester) async {
+        final mockRepo = MockNotificationsRepository();
+        final settingsProvider = NotificationSettingsProvider(
+          repository: mockRepo,
+        );
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<NotificationsProvider>.value(
+                value: notifProvider,
+              ),
+              ChangeNotifierProvider<NotificationSettingsProvider>.value(
+                value: settingsProvider,
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    onPressed: () => NotificationsDrawer.show(ctx),
+                    child: const Text('Open Drawer'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open Drawer'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NotificationsDrawer), findsOneWidget);
+
+        // Tap settings button
+        await tester.tap(
+          find.byKey(const Key('notifications_drawer_settings_button')),
+        );
+        await tester.pumpAndSettle();
+
+        // Drawer should be closed and NotificationSettingsScreen opened
+        expect(find.byType(NotificationsDrawer), findsNothing);
+        expect(find.byType(NotificationSettingsScreen), findsOneWidget);
+        expect(find.text('Pengaturan Notifikasi'), findsOneWidget);
       },
     );
   });

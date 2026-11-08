@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/notifications_provider.dart';
+import '../screens/notification_settings_screen.dart';
 import 'notification_list_item.dart';
 
 /// Slide-over drawer presenting telematics event history, category filter chips,
@@ -72,6 +74,23 @@ class NotificationsDrawer extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                key: const Key('notifications_drawer_settings_button'),
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Pengaturan Notifikasi',
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  try {
+                    context.push('/notification-settings');
+                  } catch (_) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    );
+                  }
+                },
               ),
               IconButton(
                 key: const Key('notifications_drawer_close_button'),

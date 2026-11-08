@@ -144,5 +144,41 @@ void main() {
       expect(mockAdapter.isDisposed, isTrue);
       expect(service.hasActiveTimer, isFalse);
     });
+
+    test(
+      'TC-AAS-09: successive playAlarm calls cancel previous auto-silence timer preventing premature silencing',
+      () async {
+        // Trigger first alarm with 100ms auto-silence
+        await service.playAlarm(
+          autoSilenceDuration: const Duration(milliseconds: 100),
+        );
+        expect(service.isPlaying, isTrue);
+
+        // Wait 60ms (first timer has 40ms remaining)
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(service.isPlaying, isTrue);
+
+        // Trigger second alarm with another 100ms auto-silence (should cancel first timer)
+        await service.playAlarm(
+          autoSilenceDuration: const Duration(milliseconds: 100),
+        );
+
+        // Wait 60ms (total 120ms from start; first timer would have fired at 100ms if not cancelled)
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(
+          service.isPlaying,
+          isTrue,
+          reason: 'First timer should have been cancelled by second call',
+        );
+
+        // Wait remaining 60ms for second timer (total 120ms since second call)
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(
+          service.isPlaying,
+          isFalse,
+          reason: 'Second timer should have silenced playback',
+        );
+      },
+    );
   });
 }
