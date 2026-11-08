@@ -32,6 +32,14 @@ class AuthException extends AppException {
   ]);
 }
 
+class ForbiddenException extends AppException {
+  const ForbiddenException([
+    super.message = 'Forbidden access',
+    super.statusCode = 403,
+    super.debugDetails,
+  ]);
+}
+
 class NetworkException extends AppException {
   const NetworkException([
     super.message = 'Network connection failed',

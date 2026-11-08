@@ -34,6 +34,10 @@ class AuthFailure extends Failure {
   const AuthFailure(super.message, {super.statusCode, super.debugDetails});
 }
 
+class ForbiddenFailure extends Failure {
+  const ForbiddenFailure(super.message, {super.statusCode, super.debugDetails});
+}
+
 class NetworkFailure extends Failure {
   const NetworkFailure(super.message, {super.statusCode, super.debugDetails});
 }

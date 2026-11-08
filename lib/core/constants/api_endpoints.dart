@@ -21,6 +21,8 @@ class ApiEndpoints {
   static const String reportsTrips = '/api/reports/trips';
   static const String reportsStops = '/api/reports/stops';
   static const String commands = '/api/commands';
+  static const String commandsTypes = '/api/commands/types';
+  static const String commandsSend = '/api/commands/send';
 
   // Native WebSocket Endpoint
   static const String socket = '/api/socket';

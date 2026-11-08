@@ -21,6 +21,9 @@ import 'features/fleet/presentation/providers/live_fleet_provider.dart';
 import 'features/reports/data/datasources/reports_remote_data_source.dart';
 import 'features/reports/data/repositories/reports_repository_impl.dart';
 import 'features/reports/domain/repositories/reports_repository.dart';
+import 'features/commands/data/datasources/commands_remote_data_source.dart';
+import 'features/commands/data/repositories/commands_repository_impl.dart';
+import 'features/commands/domain/repositories/commands_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +81,13 @@ void main() async {
     remoteDataSource: reportsRemoteDataSource,
   );
 
+  final commandsRemoteDataSource = CommandsRemoteDataSourceImpl(
+    dioClient: dioClient,
+  );
+  final commandsRepository = CommandsRepositoryImpl(
+    remoteDataSource: commandsRemoteDataSource,
+  );
+
   final appRouter = AppRouter(authProvider: authProvider);
 
   // Validate initial authentication status in background
@@ -104,6 +114,10 @@ void main() async {
             value: reportsRemoteDataSource,
           ),
           Provider<ReportsRepository>.value(value: reportsRepository),
+          Provider<CommandsRemoteDataSource>.value(
+            value: commandsRemoteDataSource,
+          ),
+          Provider<CommandsRepository>.value(value: commandsRepository),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,
           ),
