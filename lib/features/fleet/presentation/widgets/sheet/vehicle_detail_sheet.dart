@@ -334,18 +334,18 @@ class VehicleDetailSheet extends StatelessWidget {
       driversProvider = null;
     }
 
+    final rawRfid = ActiveDriverResolver.extractDriverUniqueId(position);
+
     DriverModel? activeDriver;
     if (driversProvider != null) {
       activeDriver = driversProvider.resolveActiveDriver(position);
-      if (activeDriver == null) {
+      if (activeDriver == null && rawRfid == null) {
         final deviceDrivers = driversProvider.getDriversForDevice(device.id);
         if (deviceDrivers.isNotEmpty) {
           activeDriver = deviceDrivers.first;
         }
       }
     }
-
-    final rawRfid = ActiveDriverResolver.extractDriverUniqueId(position);
 
     return Container(
       key: const Key('vehicle_sheet_driver_card'),

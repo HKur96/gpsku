@@ -17,6 +17,12 @@ class ApiEndpoints {
   static const String groups = '/api/groups';
   static const String drivers = '/api/drivers';
   static const String notifications = '/api/notifications';
+  static const String notificationsTypes = '/api/notifications/types';
+  static const String notificationsNotificators =
+      '/api/notifications/notificators';
+  static String notificationTest(String notificator) =>
+      '/api/notifications/test/$notificator';
+  static const String notificationTestAll = '/api/notifications/test';
   static const String reports = '/api/reports';
   static const String reportsRoute = '/api/reports/route';
   static const String reportsTrips = '/api/reports/trips';

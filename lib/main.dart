@@ -36,6 +36,10 @@ import 'features/drivers/data/datasources/drivers_remote_data_source.dart';
 import 'features/drivers/data/repositories/drivers_repository_impl.dart';
 import 'features/drivers/domain/repositories/drivers_repository.dart';
 import 'features/drivers/presentation/providers/drivers_provider.dart';
+import 'features/notifications/data/datasources/notifications_remote_data_source.dart';
+import 'features/notifications/data/repositories/notifications_repository_impl.dart';
+import 'features/notifications/domain/repositories/notifications_repository.dart';
+import 'features/notifications/domain/services/event_stream_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -126,6 +130,16 @@ void main() async {
   );
   final driversProvider = DriversProvider(repository: driversRepository);
 
+  final notificationsRemoteDataSource = NotificationsRemoteDataSourceImpl(
+    dioClient: dioClient,
+  );
+  final notificationsRepository = NotificationsRepositoryImpl(
+    remoteDataSource: notificationsRemoteDataSource,
+  );
+  final eventStreamService = EventStreamService(
+    webSocketService: webSocketService,
+  );
+
   final appRouter = AppRouter(authProvider: authProvider);
 
   // Validate initial authentication status in background
@@ -168,6 +182,13 @@ void main() async {
             value: driversRemoteDataSource,
           ),
           Provider<DriversRepository>.value(value: driversRepository),
+          Provider<NotificationsRemoteDataSource>.value(
+            value: notificationsRemoteDataSource,
+          ),
+          Provider<NotificationsRepository>.value(
+            value: notificationsRepository,
+          ),
+          Provider<EventStreamService>.value(value: eventStreamService),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,
           ),

@@ -22,6 +22,7 @@ import 'package:gpsku/features/maintenance/presentation/providers/maintenance_pr
 import 'package:gpsku/features/maintenance/presentation/widgets/maintenance_list_drawer.dart';
 import 'package:gpsku/features/drivers/presentation/providers/drivers_provider.dart';
 import 'package:gpsku/features/drivers/presentation/widgets/driver_list_drawer.dart';
+import 'package:gpsku/features/notifications/domain/services/event_stream_service.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -207,6 +208,11 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 geofences?.clearGeofences();
                 maintenance?.clearMaintenance();
                 drivers?.clearDrivers();
+                try {
+                  context.read<EventStreamService>().clearBuffer();
+                } on ProviderNotFoundException {
+                  // Ignored in partial test harness
+                }
                 await _geofenceRenderer.clearGeofences();
                 await auth.logout();
               },

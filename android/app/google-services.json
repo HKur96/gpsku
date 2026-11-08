@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "385551828333",
+    "project_id": "gpsku-134f2",
+    "storage_bucket": "gpsku-134f2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385551828333:android:788191906c8d9fc5340664",
+        "android_client_info": {
+          "package_name": "net.gpsku"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAh6JsEo-ABVFpOOuacSyoiC8FX5hsbTWI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

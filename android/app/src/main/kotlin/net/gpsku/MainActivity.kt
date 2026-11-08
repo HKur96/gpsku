@@ -1,4 +1,4 @@
-package id.gpsku.app
+package net.gpsku
 
 import io.flutter.embedding.android.FlutterActivity
 
