@@ -47,4 +47,3 @@ abstract class MaintenanceRepository {
     CancelToken? cancelToken,
   });
 }
-

@@ -123,16 +123,15 @@ class MaintenanceModel {
           mapEquals(attributes, other.attributes);
 
   @override
-  int get hashCode =>
-      id.hashCode ^
-      name.hashCode ^
-      type.hashCode ^
-      start.hashCode ^
-      period.hashCode ^
-      attributes.hashCode;
+  int get hashCode {
+    int attrHash = 0;
+    for (final entry in attributes.entries) {
+      attrHash ^= Object.hash(entry.key, entry.value);
+    }
+    return Object.hash(id, name, type, start, period, attrHash);
+  }
 
   @override
   String toString() =>
       'MaintenanceModel(id: $id, name: "$name", type: "$type", start: $start, period: $period)';
 }
-

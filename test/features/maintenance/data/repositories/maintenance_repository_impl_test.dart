@@ -107,122 +107,140 @@ void main() {
       repository = MaintenanceRepositoryImpl(remoteDataSource: mockDataSource);
     });
 
-    test('TC-MRI-01: getMaintenances returns Right(unmodifiable list) on success', () async {
-      mockDataSource.mockListResult = [tMaintenance];
+    test(
+      'TC-MRI-01: getMaintenances returns Right(unmodifiable list) on success',
+      () async {
+        mockDataSource.mockListResult = [tMaintenance];
 
-      final result = await repository.getMaintenances();
+        final result = await repository.getMaintenances();
 
-      expect(result.isRight(), isTrue);
-      result.fold(
-        (failure) => fail('Should succeed'),
-        (items) {
+        expect(result.isRight(), isTrue);
+        result.fold((failure) => fail('Should succeed'), (items) {
           expect(items.length, equals(1));
           expect(items.first.id, equals(301));
           expect(() => items.add(tMaintenance), throwsUnsupportedError);
-        },
-      );
-    });
+        });
+      },
+    );
 
-    test('TC-MRI-02: createMaintenance returns Right(created) on success', () async {
-      mockDataSource.mockSingleResult = tMaintenance;
+    test(
+      'TC-MRI-02: createMaintenance returns Right(created) on success',
+      () async {
+        mockDataSource.mockSingleResult = tMaintenance;
 
-      final result = await repository.createMaintenance(tMaintenance);
+        final result = await repository.createMaintenance(tMaintenance);
 
-      expect(result.isRight(), isTrue);
-      result.fold(
-        (failure) => fail('Should succeed'),
-        (created) => expect(created.id, equals(301)),
-      );
-    });
+        expect(result.isRight(), isTrue);
+        result.fold(
+          (failure) => fail('Should succeed'),
+          (created) => expect(created.id, equals(301)),
+        );
+      },
+    );
 
-    test('TC-MRI-03: updateMaintenance returns Right(updated) on success', () async {
-      mockDataSource.mockSingleResult = tMaintenance;
+    test(
+      'TC-MRI-03: updateMaintenance returns Right(updated) on success',
+      () async {
+        mockDataSource.mockSingleResult = tMaintenance;
 
-      final result = await repository.updateMaintenance(tMaintenance);
+        final result = await repository.updateMaintenance(tMaintenance);
 
-      expect(result.isRight(), isTrue);
-      result.fold(
-        (failure) => fail('Should succeed'),
-        (updated) => expect(updated.id, equals(301)),
-      );
-    });
+        expect(result.isRight(), isTrue);
+        result.fold(
+          (failure) => fail('Should succeed'),
+          (updated) => expect(updated.id, equals(301)),
+        );
+      },
+    );
 
-    test('TC-MRI-04: deleteMaintenance returns Right(null) on success', () async {
-      final result = await repository.deleteMaintenance(301);
+    test(
+      'TC-MRI-04: deleteMaintenance returns Right(null) on success',
+      () async {
+        final result = await repository.deleteMaintenance(301);
 
-      expect(result.isRight(), isTrue);
-      expect(mockDataSource.deleteMaintenanceCalled, isTrue);
-      expect(mockDataSource.lastDeletedId, equals(301));
-    });
+        expect(result.isRight(), isTrue);
+        expect(mockDataSource.deleteMaintenanceCalled, isTrue);
+        expect(mockDataSource.lastDeletedId, equals(301));
+      },
+    );
 
-    test('TC-MRI-05: linkDeviceMaintenance returns Right(null) on success', () async {
-      final result = await repository.linkDeviceMaintenance(
-        deviceId: 12,
-        maintenanceId: 301,
-      );
+    test(
+      'TC-MRI-05: linkDeviceMaintenance returns Right(null) on success',
+      () async {
+        final result = await repository.linkDeviceMaintenance(
+          deviceId: 12,
+          maintenanceId: 301,
+        );
 
-      expect(result.isRight(), isTrue);
-      expect(mockDataSource.linkCalled, isTrue);
-      expect(mockDataSource.lastLinkedDeviceId, equals(12));
-      expect(mockDataSource.lastLinkedMaintenanceId, equals(301));
-    });
+        expect(result.isRight(), isTrue);
+        expect(mockDataSource.linkCalled, isTrue);
+        expect(mockDataSource.lastLinkedDeviceId, equals(12));
+        expect(mockDataSource.lastLinkedMaintenanceId, equals(301));
+      },
+    );
 
-    test('TC-MRI-06: unlinkDeviceMaintenance returns Right(null) on success', () async {
-      final result = await repository.unlinkDeviceMaintenance(
-        deviceId: 12,
-        maintenanceId: 301,
-      );
+    test(
+      'TC-MRI-06: unlinkDeviceMaintenance returns Right(null) on success',
+      () async {
+        final result = await repository.unlinkDeviceMaintenance(
+          deviceId: 12,
+          maintenanceId: 301,
+        );
 
-      expect(result.isRight(), isTrue);
-      expect(mockDataSource.unlinkCalled, isTrue);
-      expect(mockDataSource.lastUnlinkedDeviceId, equals(12));
-      expect(mockDataSource.lastUnlinkedMaintenanceId, equals(301));
-    });
+        expect(result.isRight(), isTrue);
+        expect(mockDataSource.unlinkCalled, isTrue);
+        expect(mockDataSource.lastUnlinkedDeviceId, equals(12));
+        expect(mockDataSource.lastUnlinkedMaintenanceId, equals(301));
+      },
+    );
 
     test('TC-MRI-07: Maps AuthException to AuthFailure', () async {
-      mockDataSource.exceptionToThrow = const AuthException('Unauthorized', 401);
+      mockDataSource.exceptionToThrow = const AuthException(
+        'Unauthorized',
+        401,
+      );
 
       final result = await repository.getMaintenances();
 
       expect(result.isLeft(), isTrue);
-      result.fold(
-        (failure) {
-          expect(failure, isA<AuthFailure>());
-          expect(failure.statusCode, equals(401));
-        },
-        (_) => fail('Should fail'),
-      );
+      result.fold((failure) {
+        expect(failure, isA<AuthFailure>());
+        expect(failure.statusCode, equals(401));
+      }, (_) => fail('Should fail'));
     });
 
     test('TC-MRI-08: Maps ForbiddenException to ForbiddenFailure', () async {
-      mockDataSource.exceptionToThrow = const ForbiddenException('Forbidden', 403);
+      mockDataSource.exceptionToThrow = const ForbiddenException(
+        'Forbidden',
+        403,
+      );
 
       final result = await repository.createMaintenance(tMaintenance);
 
       expect(result.isLeft(), isTrue);
-      result.fold(
-        (failure) {
-          expect(failure, isA<ForbiddenFailure>());
-          expect(failure.statusCode, equals(403));
-        },
-        (_) => fail('Should fail'),
-      );
+      result.fold((failure) {
+        expect(failure, isA<ForbiddenFailure>());
+        expect(failure.statusCode, equals(403));
+      }, (_) => fail('Should fail'));
     });
 
-    test('TC-MRI-09: Maps ConnectionTimeoutException to TimeoutFailure', () async {
-      mockDataSource.exceptionToThrow = const ConnectionTimeoutException('Timed out', 408);
+    test(
+      'TC-MRI-09: Maps ConnectionTimeoutException to TimeoutFailure',
+      () async {
+        mockDataSource.exceptionToThrow = const ConnectionTimeoutException(
+          'Timed out',
+          408,
+        );
 
-      final result = await repository.updateMaintenance(tMaintenance);
+        final result = await repository.updateMaintenance(tMaintenance);
 
-      expect(result.isLeft(), isTrue);
-      result.fold(
-        (failure) {
+        expect(result.isLeft(), isTrue);
+        result.fold((failure) {
           expect(failure, isA<TimeoutFailure>());
           expect(failure.statusCode, equals(408));
-        },
-        (_) => fail('Should fail'),
-      );
-    });
+        }, (_) => fail('Should fail'));
+      },
+    );
 
     test('TC-MRI-10: Maps NetworkException to NetworkFailure', () async {
       mockDataSource.exceptionToThrow = const NetworkException('Network down');
@@ -237,7 +255,10 @@ void main() {
     });
 
     test('TC-MRI-11: Maps ServerException to ServerFailure', () async {
-      mockDataSource.exceptionToThrow = const ServerException('Server error', 500);
+      mockDataSource.exceptionToThrow = const ServerException(
+        'Server error',
+        500,
+      );
 
       final result = await repository.linkDeviceMaintenance(
         deviceId: 1,
@@ -245,13 +266,10 @@ void main() {
       );
 
       expect(result.isLeft(), isTrue);
-      result.fold(
-        (failure) {
-          expect(failure, isA<ServerFailure>());
-          expect(failure.statusCode, equals(500));
-        },
-        (_) => fail('Should fail'),
-      );
+      result.fold((failure) {
+        expect(failure, isA<ServerFailure>());
+        expect(failure.statusCode, equals(500));
+      }, (_) => fail('Should fail'));
     });
 
     test('TC-MRI-12: Maps generic Exception to UnexpectedFailure', () async {
@@ -270,4 +288,3 @@ void main() {
     });
   });
 }
-
