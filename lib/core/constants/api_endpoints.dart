@@ -23,6 +23,7 @@ class ApiEndpoints {
   static const String commands = '/api/commands';
   static const String commandsTypes = '/api/commands/types';
   static const String commandsSend = '/api/commands/send';
+  static const String permissions = '/api/permissions';
 
   // Native WebSocket Endpoint
   static const String socket = '/api/socket';

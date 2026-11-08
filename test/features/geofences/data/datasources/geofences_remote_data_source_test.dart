@@ -452,5 +452,39 @@ void main() {
         },
       );
     });
+
+    group('Permissions Management (Link / Unlink Devices)', () {
+      test(
+        'TC-GDS-15: linkDeviceGeofence sends POST /api/permissions with deviceId and geofenceId',
+        () async {
+          mockDioClient.mockStatusCode = 204;
+          mockDioClient.mockResponseData = null;
+
+          await dataSource.linkDeviceGeofence(deviceId: 12, geofenceId: 5);
+
+          expect(mockDioClient.lastPath, equals(ApiEndpoints.permissions));
+          expect(
+            mockDioClient.lastData,
+            equals({'deviceId': 12, 'geofenceId': 5}),
+          );
+        },
+      );
+
+      test(
+        'TC-GDS-16: unlinkDeviceGeofence sends DELETE /api/permissions with deviceId and geofenceId',
+        () async {
+          mockDioClient.mockStatusCode = 204;
+          mockDioClient.mockResponseData = null;
+
+          await dataSource.unlinkDeviceGeofence(deviceId: 12, geofenceId: 5);
+
+          expect(mockDioClient.lastPath, equals(ApiEndpoints.permissions));
+          expect(
+            mockDioClient.lastData,
+            equals({'deviceId': 12, 'geofenceId': 5}),
+          );
+        },
+      );
+    });
   });
 }

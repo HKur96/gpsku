@@ -70,6 +70,35 @@ class MockGeofencesRemoteDataSource implements GeofencesRemoteDataSource {
 
     if (exceptionToThrow != null) throw exceptionToThrow!;
   }
+
+  int? lastLinkedDeviceId;
+  int? lastLinkedGeofenceId;
+  int? lastUnlinkedDeviceId;
+  int? lastUnlinkedGeofenceId;
+
+  @override
+  Future<void> linkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    lastLinkedDeviceId = deviceId;
+    lastLinkedGeofenceId = geofenceId;
+    lastCancelToken = cancelToken;
+    if (exceptionToThrow != null) throw exceptionToThrow!;
+  }
+
+  @override
+  Future<void> unlinkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    lastUnlinkedDeviceId = deviceId;
+    lastUnlinkedGeofenceId = geofenceId;
+    lastCancelToken = cancelToken;
+    if (exceptionToThrow != null) throw exceptionToThrow!;
+  }
 }
 
 void main() {
@@ -270,6 +299,55 @@ void main() {
           expect(
             result.swap().getOrElse((_) => throw 'fail'),
             isA<UnexpectedFailure>(),
+          );
+        },
+      );
+
+      test(
+        'TC-GRI-11: linkDeviceGeofence delegates to remoteDataSource and returns Right(null)',
+        () async {
+          final result = await repository.linkDeviceGeofence(
+            deviceId: 10,
+            geofenceId: 25,
+          );
+
+          expect(result.isRight(), isTrue);
+          expect(mockDataSource.lastLinkedDeviceId, equals(10));
+          expect(mockDataSource.lastLinkedGeofenceId, equals(25));
+        },
+      );
+
+      test(
+        'TC-GRI-12: unlinkDeviceGeofence delegates to remoteDataSource and returns Right(null)',
+        () async {
+          final result = await repository.unlinkDeviceGeofence(
+            deviceId: 10,
+            geofenceId: 25,
+          );
+
+          expect(result.isRight(), isTrue);
+          expect(mockDataSource.lastUnlinkedDeviceId, equals(10));
+          expect(mockDataSource.lastUnlinkedGeofenceId, equals(25));
+        },
+      );
+
+      test(
+        'TC-GRI-13: linkDeviceGeofence maps AuthException to Left(AuthFailure)',
+        () async {
+          mockDataSource.exceptionToThrow = const AuthException(
+            'Unauthorized',
+            401,
+          );
+
+          final result = await repository.linkDeviceGeofence(
+            deviceId: 10,
+            geofenceId: 25,
+          );
+
+          expect(result.isLeft(), isTrue);
+          expect(
+            result.swap().getOrElse((_) => throw 'fail'),
+            isA<AuthFailure>().having((f) => f.statusCode, 'statusCode', 401),
           );
         },
       );

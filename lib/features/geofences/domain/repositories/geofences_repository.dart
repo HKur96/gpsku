@@ -33,4 +33,18 @@ abstract class GeofencesRepository {
     int id, {
     CancelToken? cancelToken,
   });
+
+  /// Links a device to a geofence via POST `/api/permissions`.
+  Future<Either<Failure, void>> linkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  });
+
+  /// Unlinks a device from a geofence via DELETE `/api/permissions`.
+  Future<Either<Failure, void>> unlinkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  });
 }

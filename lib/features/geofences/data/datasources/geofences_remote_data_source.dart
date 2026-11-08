@@ -34,6 +34,22 @@ abstract class GeofencesRemoteDataSource {
   /// Deletes a geofence by [id].
   /// Endpoint: DELETE `/api/geofences/{id}`
   Future<void> deleteGeofence(int id, {CancelToken? cancelToken});
+
+  /// Links a device to a geofence via Traccar permissions API.
+  /// Endpoint: POST `/api/permissions`
+  Future<void> linkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  });
+
+  /// Unlinks a device from a geofence via Traccar permissions API.
+  /// Endpoint: DELETE `/api/permissions`
+  Future<void> unlinkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  });
 }
 
 /// Production implementation of [GeofencesRemoteDataSource] using [DioClient].
@@ -171,6 +187,48 @@ class GeofencesRemoteDataSourceImpl implements GeofencesRemoteDataSource {
       );
     } on DioException catch (e) {
       _handleDioException(e, 'geofences/delete');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  @override
+  Future<void> linkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await dioClient.post<dynamic>(
+        ApiEndpoints.permissions,
+        data: {'deviceId': deviceId, 'geofenceId': geofenceId},
+        options: Options(headers: _defaultHeaders),
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (e) {
+      _handleDioException(e, 'permissions/link');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  @override
+  Future<void> unlinkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await dioClient.delete<dynamic>(
+        ApiEndpoints.permissions,
+        data: {'deviceId': deviceId, 'geofenceId': geofenceId},
+        options: Options(headers: _defaultHeaders),
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (e) {
+      _handleDioException(e, 'permissions/unlink');
     } catch (e) {
       if (e is AppException) rethrow;
       throw ServerException(e.toString());

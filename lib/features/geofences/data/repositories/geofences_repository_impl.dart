@@ -119,4 +119,60 @@ class GeofencesRepositoryImpl implements GeofencesRepository {
       return Left(UnexpectedFailure(e.toString()));
     }
   }
+
+  @override
+  Future<Either<Failure, void>> linkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await remoteDataSource.linkDeviceGeofence(
+        deviceId: deviceId,
+        geofenceId: geofenceId,
+        cancelToken: cancelToken,
+      );
+      return const Right(null);
+    } on AuthException catch (e) {
+      return Left(AuthFailure(e.message, statusCode: e.statusCode));
+    } on ForbiddenException catch (e) {
+      return Left(ForbiddenFailure(e.message, statusCode: e.statusCode));
+    } on ConnectionTimeoutException catch (e) {
+      return Left(TimeoutFailure(e.message, statusCode: e.statusCode));
+    } on NetworkException catch (e) {
+      return Left(NetworkFailure(e.message, statusCode: e.statusCode));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message, statusCode: e.statusCode));
+    } catch (e) {
+      return Left(UnexpectedFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> unlinkDeviceGeofence({
+    required int deviceId,
+    required int geofenceId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await remoteDataSource.unlinkDeviceGeofence(
+        deviceId: deviceId,
+        geofenceId: geofenceId,
+        cancelToken: cancelToken,
+      );
+      return const Right(null);
+    } on AuthException catch (e) {
+      return Left(AuthFailure(e.message, statusCode: e.statusCode));
+    } on ForbiddenException catch (e) {
+      return Left(ForbiddenFailure(e.message, statusCode: e.statusCode));
+    } on ConnectionTimeoutException catch (e) {
+      return Left(TimeoutFailure(e.message, statusCode: e.statusCode));
+    } on NetworkException catch (e) {
+      return Left(NetworkFailure(e.message, statusCode: e.statusCode));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message, statusCode: e.statusCode));
+    } catch (e) {
+      return Left(UnexpectedFailure(e.toString()));
+    }
+  }
 }

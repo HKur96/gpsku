@@ -27,6 +27,7 @@ import 'features/commands/domain/repositories/commands_repository.dart';
 import 'features/geofences/data/datasources/geofences_remote_data_source.dart';
 import 'features/geofences/data/repositories/geofences_repository_impl.dart';
 import 'features/geofences/domain/repositories/geofences_repository.dart';
+import 'features/geofences/presentation/providers/geofences_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -97,6 +98,7 @@ void main() async {
   final geofencesRepository = GeofencesRepositoryImpl(
     remoteDataSource: geofencesRemoteDataSource,
   );
+  final geofencesProvider = GeofencesProvider(repository: geofencesRepository);
 
   final appRouter = AppRouter(authProvider: authProvider);
 
@@ -132,6 +134,9 @@ void main() async {
             value: geofencesRemoteDataSource,
           ),
           Provider<GeofencesRepository>.value(value: geofencesRepository),
+          ChangeNotifierProvider<GeofencesProvider>.value(
+            value: geofencesProvider,
+          ),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,
           ),

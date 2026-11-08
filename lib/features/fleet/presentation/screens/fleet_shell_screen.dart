@@ -13,6 +13,11 @@ import '../widgets/map/fleet_marker_manager.dart';
 import '../widgets/sheet/vehicle_detail_sheet.dart';
 import 'package:gpsku/features/reports/presentation/screens/route_history_screen.dart';
 import 'package:gpsku/features/commands/presentation/widgets/command_bottom_sheet.dart';
+import 'package:gpsku/features/geofences/presentation/map/geofence_map_renderer.dart';
+import 'package:gpsku/features/geofences/presentation/map/map_geofence_controller.dart';
+import 'package:gpsku/features/geofences/presentation/providers/geofences_provider.dart';
+import 'package:gpsku/features/geofences/presentation/widgets/geofence_list_drawer.dart';
+import 'package:gpsku/features/geofences/presentation/widgets/geofence_map_layer_toggle_button.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -25,16 +30,28 @@ class FleetShellScreen extends StatefulWidget {
 
 class _FleetShellScreenState extends State<FleetShellScreen> {
   final FleetMarkerManager _markerManager = FleetMarkerManager();
+  final GeofenceMapRenderer _geofenceRenderer = GeofenceMapRenderer();
   FleetCameraController? _cameraController;
 
   @override
   void initState() {
     super.initState();
     _markerManager.onMarkerTapped = _onMarkerTapped;
-    // Connect WebSocket when entering authenticated shell
+    // Connect WebSocket and fetch geofences when entering authenticated shell
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ws = context.read<TraccarWebSocketService>();
-      ws.connect();
+      if (!mounted) return;
+      try {
+        final ws = context.read<TraccarWebSocketService>();
+        ws.connect();
+      } on ProviderNotFoundException {
+        // Ignored when running with partial test harness
+      }
+      try {
+        final geofencesProvider = context.read<GeofencesProvider>();
+        geofencesProvider.fetchGeofences();
+      } on ProviderNotFoundException {
+        // Ignored when running with partial test harness
+      }
     });
   }
 
@@ -57,6 +74,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
   @override
   void dispose() {
     _markerManager.dispose();
+    _geofenceRenderer.dispose();
     super.dispose();
   }
 
@@ -64,7 +82,18 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final fleet = context.watch<LiveFleetProvider>();
+    GeofencesProvider? geofences;
+    try {
+      geofences = context.watch<GeofencesProvider>();
+    } on ProviderNotFoundException {
+      geofences = null;
+    }
     final user = auth.currentUser;
+
+    if (_geofenceRenderer.isReady && geofences != null) {
+      _geofenceRenderer.renderGeofences(geofences.geofences);
+      _geofenceRenderer.setVisibility(geofences.isLayersVisible);
+    }
 
     final selectedId = fleet.selectedDeviceId;
     final selectedDevice = selectedId != null
@@ -111,11 +140,29 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
             _onMarkerTapped(device.id);
           },
         ),
+        endDrawer: geofences != null
+            ? GeofenceListDrawer(
+                onGeofenceSelected: (geofence) {
+                  Navigator.of(context).pop();
+                  _geofenceRenderer.fitGeofenceBounds(geofence);
+                },
+              )
+            : null,
         appBar: AppBar(
           title: const Text('GPSku Fleet Bootstrap'),
           backgroundColor: const Color(0xFF1E88E5),
           foregroundColor: Colors.white,
           actions: [
+            if (geofences != null)
+              Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.fence),
+                  tooltip: 'Daftar Geofence',
+                  onPressed: () {
+                    Scaffold.of(ctx).openEndDrawer();
+                  },
+                ),
+              ),
             IconButton(
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
@@ -295,14 +342,39 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                           },
                           onStyleLoaded: (controller) {
                             AppLogger.info(
-                              '[FLEET_MAP] onStyleLoaded successfully fired! Attaching FleetMarkerManager.',
+                              '[FLEET_MAP] onStyleLoaded successfully fired! Attaching FleetMarkerManager & GeofenceMapRenderer.',
                             );
                             _markerManager.attach(
                               controller,
                               fleetProvider: context.read<LiveFleetProvider>(),
                             );
+                            _geofenceRenderer.attach(
+                              MapLibreGeofenceAdapter(controller),
+                            );
+                            GeofencesProvider? geofences;
+                            try {
+                              geofences = context.read<GeofencesProvider>();
+                            } on ProviderNotFoundException {
+                              geofences = null;
+                            }
+                            if (geofences != null &&
+                                geofences.geofences.isNotEmpty) {
+                              _geofenceRenderer.renderGeofences(
+                                geofences.geofences,
+                              );
+                            }
                           },
                         ),
+                        if (geofences != null)
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: GeofenceMapLayerToggleButton(
+                              onToggle: (visible) {
+                                _geofenceRenderer.setVisibility(visible);
+                              },
+                            ),
+                          ),
                         if (selectedDevice != null)
                           Positioned(
                             left: 0,
