@@ -31,6 +31,7 @@ import 'features/geofences/presentation/providers/geofences_provider.dart';
 import 'features/maintenance/data/datasources/maintenance_remote_data_source.dart';
 import 'features/maintenance/data/repositories/maintenance_repository_impl.dart';
 import 'features/maintenance/domain/repositories/maintenance_repository.dart';
+import 'features/maintenance/presentation/providers/maintenance_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,6 +110,9 @@ void main() async {
   final maintenanceRepository = MaintenanceRepositoryImpl(
     remoteDataSource: maintenanceRemoteDataSource,
   );
+  final maintenanceProvider = MaintenanceProvider(
+    repository: maintenanceRepository,
+  );
 
   final appRouter = AppRouter(authProvider: authProvider);
 
@@ -150,6 +154,9 @@ void main() async {
           Provider<MaintenanceRepository>.value(value: maintenanceRepository),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,
+          ),
+          ChangeNotifierProvider<MaintenanceProvider>.value(
+            value: maintenanceProvider,
           ),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,

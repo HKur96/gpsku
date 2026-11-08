@@ -11,6 +11,13 @@ import 'package:gpsku/features/fleet/presentation/providers/live_fleet_provider.
 import 'package:gpsku/features/fleet/presentation/widgets/map/camera_calculation_helper.dart';
 import 'package:gpsku/features/fleet/presentation/widgets/map/fleet_marker_manager.dart';
 import 'package:gpsku/features/fleet/presentation/widgets/sheet/vehicle_detail_sheet.dart';
+import 'package:dio/dio.dart';
+import 'package:fpdart/fpdart.dart';
+import 'package:provider/provider.dart';
+import 'package:gpsku/core/errors/failures.dart';
+import 'package:gpsku/features/maintenance/data/models/maintenance_model.dart';
+import 'package:gpsku/features/maintenance/domain/repositories/maintenance_repository.dart';
+import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
 
 class FakeWebSocketService extends TraccarWebSocketService {
   final _stateController =
@@ -471,5 +478,191 @@ void main() {
         fakeWs.dispose();
       },
     );
+
+    testWidgets(
+      'TC-VDS-11: Shows "Servis Jatuh Tempo" badge when device has overdue maintenance schedule',
+      (tester) async {
+        final mockRepo = _SheetMockMaintenanceRepo();
+        final maintenanceProvider = MaintenanceProvider(repository: mockRepo);
+
+        const overdueItem = MaintenanceModel(
+          id: 99,
+          name: 'Ganti Filter Solar',
+          type: 'totalDistance',
+          start: 10000000.0, // 10,000 km
+          period: 5000000.0, // 5,000 km -> due at 15,000 km
+        );
+        maintenanceProvider.setDeviceMaintenanceLinks(10, [99]);
+        mockRepo.deviceMaintenances[10] = [overdueItem];
+        await maintenanceProvider.fetchMaintenanceForDevice(10);
+
+        // Position with totalDistance = 16,000 km (overdue!)
+        final overduePosition = samplePosition.copyWith(
+          attributes: {'totalDistance': 16000000.0},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<MaintenanceProvider>.value(
+              value: maintenanceProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: overduePosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Servis Jatuh Tempo'), findsOneWidget);
+        expect(
+          find.byKey(const Key('vehicle_sheet_maintenance_badge')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'TC-VDS-12: Shows "Jadwal Servis Mendekati" badge when device has warning maintenance schedule',
+      (tester) async {
+        final mockRepo = _SheetMockMaintenanceRepo();
+        final maintenanceProvider = MaintenanceProvider(repository: mockRepo);
+
+        const warningItem = MaintenanceModel(
+          id: 88,
+          name: 'Tune Up Mesin',
+          type: 'totalDistance',
+          start: 10000000.0,
+          period: 5000000.0, // due at 15,000 km, warning threshold >= 14,500 km
+        );
+        maintenanceProvider.setDeviceMaintenanceLinks(10, [88]);
+        mockRepo.deviceMaintenances[10] = [warningItem];
+        await maintenanceProvider.fetchMaintenanceForDevice(10);
+
+        // Position with totalDistance = 14,700 km (94% -> warning!)
+        final warningPosition = samplePosition.copyWith(
+          attributes: {'totalDistance': 14700000.0},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<MaintenanceProvider>.value(
+              value: maintenanceProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: warningPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Jadwal Servis Mendekati'), findsOneWidget);
+        expect(
+          find.byKey(const Key('vehicle_sheet_maintenance_badge')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'TC-VDS-13: Does NOT show due badge when device has only normal maintenance schedule',
+      (tester) async {
+        final mockRepo = _SheetMockMaintenanceRepo();
+        final maintenanceProvider = MaintenanceProvider(repository: mockRepo);
+
+        const normalItem = MaintenanceModel(
+          id: 77,
+          name: 'Ganti Aki',
+          type: 'totalDistance',
+          start: 10000000.0,
+          period: 5000000.0,
+        );
+        maintenanceProvider.setDeviceMaintenanceLinks(10, [77]);
+        mockRepo.deviceMaintenances[10] = [normalItem];
+        await maintenanceProvider.fetchMaintenanceForDevice(10);
+
+        // Position with totalDistance = 11,000 km (20% -> normal!)
+        final normalPosition = samplePosition.copyWith(
+          attributes: {'totalDistance': 11000000.0},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider<MaintenanceProvider>.value(
+              value: maintenanceProvider,
+              child: Scaffold(
+                body: VehicleDetailSheet(
+                  device: sampleDevice,
+                  position: normalPosition,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Servis Jatuh Tempo'), findsNothing);
+        expect(find.text('Jadwal Servis Mendekati'), findsNothing);
+        expect(
+          find.byKey(const Key('vehicle_sheet_maintenance_badge')),
+          findsNothing,
+        );
+      },
+    );
   });
+}
+
+class _SheetMockMaintenanceRepo implements MaintenanceRepository {
+  final Map<int, List<MaintenanceModel>> deviceMaintenances = {};
+
+  @override
+  Future<Either<Failure, List<MaintenanceModel>>> getMaintenances({
+    bool? all,
+    int? userId,
+    int? deviceId,
+    int? groupId,
+    CancelToken? cancelToken,
+  }) async {
+    if (deviceId != null) {
+      return Right(deviceMaintenances[deviceId] ?? []);
+    }
+    return const Right([]);
+  }
+
+  @override
+  Future<Either<Failure, MaintenanceModel>> createMaintenance(
+    MaintenanceModel maintenance, {
+    CancelToken? cancelToken,
+  }) async => Right(maintenance);
+
+  @override
+  Future<Either<Failure, MaintenanceModel>> updateMaintenance(
+    MaintenanceModel maintenance, {
+    CancelToken? cancelToken,
+  }) async => Right(maintenance);
+
+  @override
+  Future<Either<Failure, void>> deleteMaintenance(
+    int id, {
+    CancelToken? cancelToken,
+  }) async => const Right(null);
+
+  @override
+  Future<Either<Failure, void>> linkDeviceMaintenance({
+    required int deviceId,
+    required int maintenanceId,
+    CancelToken? cancelToken,
+  }) async => const Right(null);
+
+  @override
+  Future<Either<Failure, void>> unlinkDeviceMaintenance({
+    required int deviceId,
+    required int maintenanceId,
+    CancelToken? cancelToken,
+  }) async => const Right(null);
 }

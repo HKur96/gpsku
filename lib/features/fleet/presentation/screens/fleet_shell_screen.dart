@@ -18,6 +18,8 @@ import 'package:gpsku/features/geofences/presentation/map/map_geofence_controlle
 import 'package:gpsku/features/geofences/presentation/providers/geofences_provider.dart';
 import 'package:gpsku/features/geofences/presentation/widgets/geofence_list_drawer.dart';
 import 'package:gpsku/features/geofences/presentation/widgets/geofence_map_layer_toggle_button.dart';
+import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
+import 'package:gpsku/features/maintenance/presentation/widgets/maintenance_list_drawer.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -87,6 +89,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
       geofences = context.watch<GeofencesProvider>();
     } on ProviderNotFoundException {
       geofences = null;
+    }
+    MaintenanceProvider? maintenance;
+    try {
+      maintenance = context.watch<MaintenanceProvider>();
+    } on ProviderNotFoundException {
+      maintenance = null;
     }
     final user = auth.currentUser;
 
@@ -163,6 +171,15 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   },
                 ),
               ),
+            if (maintenance != null)
+              IconButton(
+                key: const Key('maintenance_drawer_action_button'),
+                icon: const Icon(Icons.build_circle_outlined),
+                tooltip: 'Daftar Pemeliharaan',
+                onPressed: () {
+                  MaintenanceListDrawer.show(context);
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
@@ -171,6 +188,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 ws.disconnect();
                 fleet.clearFleet();
                 geofences?.clearGeofences();
+                maintenance?.clearMaintenance();
                 await _geofenceRenderer.clearGeofences();
                 await auth.logout();
               },

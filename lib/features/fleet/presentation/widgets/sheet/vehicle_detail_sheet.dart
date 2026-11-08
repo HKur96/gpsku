@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/data/models/position_model.dart';
+import 'package:gpsku/features/maintenance/domain/helpers/maintenance_progress_helper.dart';
+import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
 
 /// Interactive telemetry bottom sheet displaying essential device and position metrics.
 ///
@@ -115,6 +118,18 @@ class VehicleDetailSheet extends StatelessWidget {
 
     final categoryIcon = _resolveCategoryIcon(device.category);
 
+    MaintenanceProvider? maintenanceProvider;
+    try {
+      maintenanceProvider = Provider.of<MaintenanceProvider>(context);
+    } catch (_) {
+      maintenanceProvider = null;
+    }
+
+    final maintenanceAlert = maintenanceProvider?.evaluateDeviceAlertLevel(
+      device.id,
+      position,
+    );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -180,6 +195,11 @@ class VehicleDetailSheet extends StatelessWidget {
                   ),
                 ],
               ),
+              if (maintenanceAlert != null &&
+                  maintenanceAlert != MaintenanceAlertLevel.normal) ...[
+                const SizedBox(height: 4),
+                _buildMaintenanceDueBadge(maintenanceAlert),
+              ],
               const SizedBox(height: 2),
               Text(
                 device.uniqueId +
@@ -205,6 +225,43 @@ class VehicleDetailSheet extends StatelessWidget {
           onPressed: onDismiss,
         ),
       ],
+    );
+  }
+
+  Widget _buildMaintenanceDueBadge(MaintenanceAlertLevel level) {
+    final isOverdue = level == MaintenanceAlertLevel.overdue;
+    final color = isOverdue
+        ? const Color(0xFFC62828) // Red
+        : const Color(0xFFE65100); // Amber
+    final label = isOverdue ? 'Servis Jatuh Tempo' : 'Jadwal Servis Mendekati';
+
+    return Container(
+      key: const Key('vehicle_sheet_maintenance_badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isOverdue ? Icons.warning_amber_rounded : Icons.schedule,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
