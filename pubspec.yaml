@@ -1,0 +1,65 @@
+name: gpsku
+description: "GPSku Fleet Telematics Client for Traccar Ecosystem"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management (User-Defined Stack)
+  provider: ^6.1.2
+
+  # Functional Programming & Result Types (User-Defined Stack)
+  fpdart: ^1.2.0
+
+  # Networking & HTTP Inspection (User-Defined Stack)
+  dio: ^5.7.0
+  requests_inspector: ^5.5.1
+  connectivity_plus: ^7.3.2
+
+  # Real-Time WebSocket (Cookie Handshake)
+  web_socket_channel: ^3.0.1
+
+  # Declarative Routing
+  go_router: ^14.6.2
+
+  # Secure & Local Storage
+  flutter_secure_storage: ^11.0.0
+  shared_preferences: ^2.3.3
+
+  # Mapping & Geospatial Rendering
+  maplibre_gl: ^0.28.0
+
+  # Multimedia Streaming & Audio Siren
+  media_kit: ^1.1.11
+  media_kit_video: ^1.2.5
+  audioplayers: ^6.1.0
+
+  # Push Notification Bridges
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.4
+  flutter_local_notifications: ^23.0.0
+
+  # Utilities & UI Formatting
+  intl: ^0.20.2
+  fl_chart: ^0.70.0
+  shimmer: ^3.0.0
+  flutter_svg: ^2.0.16
+  share_plus: ^13.1.0
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
