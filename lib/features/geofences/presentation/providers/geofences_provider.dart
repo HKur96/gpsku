@@ -271,4 +271,17 @@ class GeofencesProvider extends ChangeNotifier {
     notifyListeners();
     return allSuccess;
   }
+
+  /// Clears all cached geofences, filters, selection, and resets state.
+  /// Called on session termination or user logout.
+  void clearGeofences() {
+    _geofences = const [];
+    _selectedGeofence = null;
+    _searchQuery = '';
+    _selectedGeometryFilter = 'all';
+    _isLayersVisible = true;
+    _isLoading = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
 }

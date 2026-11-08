@@ -28,6 +28,9 @@ import 'features/geofences/data/datasources/geofences_remote_data_source.dart';
 import 'features/geofences/data/repositories/geofences_repository_impl.dart';
 import 'features/geofences/domain/repositories/geofences_repository.dart';
 import 'features/geofences/presentation/providers/geofences_provider.dart';
+import 'features/maintenance/data/datasources/maintenance_remote_data_source.dart';
+import 'features/maintenance/data/repositories/maintenance_repository_impl.dart';
+import 'features/maintenance/domain/repositories/maintenance_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,6 +103,13 @@ void main() async {
   );
   final geofencesProvider = GeofencesProvider(repository: geofencesRepository);
 
+  final maintenanceRemoteDataSource = MaintenanceRemoteDataSourceImpl(
+    dioClient: dioClient,
+  );
+  final maintenanceRepository = MaintenanceRepositoryImpl(
+    remoteDataSource: maintenanceRemoteDataSource,
+  );
+
   final appRouter = AppRouter(authProvider: authProvider);
 
   // Validate initial authentication status in background
@@ -134,6 +144,10 @@ void main() async {
             value: geofencesRemoteDataSource,
           ),
           Provider<GeofencesRepository>.value(value: geofencesRepository),
+          Provider<MaintenanceRemoteDataSource>.value(
+            value: maintenanceRemoteDataSource,
+          ),
+          Provider<MaintenanceRepository>.value(value: maintenanceRepository),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,
           ),

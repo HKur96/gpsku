@@ -170,6 +170,8 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 final ws = context.read<TraccarWebSocketService>();
                 ws.disconnect();
                 fleet.clearFleet();
+                geofences?.clearGeofences();
+                await _geofenceRenderer.clearGeofences();
                 await auth.logout();
               },
             ),

@@ -13,6 +13,7 @@ class ApiEndpoints {
   static const String positions = '/api/positions';
   static const String events = '/api/events';
   static const String geofences = '/api/geofences';
+  static const String maintenance = '/api/maintenance';
   static const String groups = '/api/groups';
   static const String drivers = '/api/drivers';
   static const String notifications = '/api/notifications';
