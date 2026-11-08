@@ -32,6 +32,9 @@ import 'features/maintenance/data/datasources/maintenance_remote_data_source.dar
 import 'features/maintenance/data/repositories/maintenance_repository_impl.dart';
 import 'features/maintenance/domain/repositories/maintenance_repository.dart';
 import 'features/maintenance/presentation/providers/maintenance_provider.dart';
+import 'features/drivers/data/datasources/drivers_remote_data_source.dart';
+import 'features/drivers/data/repositories/drivers_repository_impl.dart';
+import 'features/drivers/domain/repositories/drivers_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +117,13 @@ void main() async {
     repository: maintenanceRepository,
   );
 
+  final driversRemoteDataSource = DriversRemoteDataSourceImpl(
+    dioClient: dioClient,
+  );
+  final driversRepository = DriversRepositoryImpl(
+    remoteDataSource: driversRemoteDataSource,
+  );
+
   final appRouter = AppRouter(authProvider: authProvider);
 
   // Validate initial authentication status in background
@@ -152,6 +162,10 @@ void main() async {
             value: maintenanceRemoteDataSource,
           ),
           Provider<MaintenanceRepository>.value(value: maintenanceRepository),
+          Provider<DriversRemoteDataSource>.value(
+            value: driversRemoteDataSource,
+          ),
+          Provider<DriversRepository>.value(value: driversRepository),
           ChangeNotifierProvider<GeofencesProvider>.value(
             value: geofencesProvider,
           ),
