@@ -38,6 +38,14 @@ class ForbiddenFailure extends Failure {
   const ForbiddenFailure(super.message, {super.statusCode, super.debugDetails});
 }
 
+class ConflictFailure extends Failure {
+  const ConflictFailure(
+    super.message, {
+    super.statusCode = 409,
+    super.debugDetails,
+  });
+}
+
 class NetworkFailure extends Failure {
   const NetworkFailure(super.message, {super.statusCode, super.debugDetails});
 }

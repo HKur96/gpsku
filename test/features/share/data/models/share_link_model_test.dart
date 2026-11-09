@@ -131,7 +131,7 @@ void main() {
     );
 
     test(
-      'TC-SLM-06: buildShareUrl normalizes base URLs with or without trailing slash',
+      'TC-SLM-06: buildShareUrl normalizes base URLs with or without trailing slash and strips /api segment',
       () {
         expect(
           ShareLinkModel.buildShareUrl('http://10.0.2.2:8082', 'tok123'),
@@ -141,6 +141,22 @@ void main() {
         expect(
           ShareLinkModel.buildShareUrl('https://gps.antigravity.id/', 'tok123'),
           'https://gps.antigravity.id/?token=tok123',
+        );
+
+        expect(
+          ShareLinkModel.buildShareUrl(
+            'https://demo.traccar.org/api',
+            'tok123',
+          ),
+          'https://demo.traccar.org/?token=tok123',
+        );
+
+        expect(
+          ShareLinkModel.buildShareUrl(
+            'https://demo.traccar.org/api/',
+            'tok123',
+          ),
+          'https://demo.traccar.org/?token=tok123',
         );
       },
     );

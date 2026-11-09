@@ -40,6 +40,14 @@ class ForbiddenException extends AppException {
   ]);
 }
 
+class ConflictException extends AppException {
+  const ConflictException([
+    super.message = 'Resource conflict',
+    super.statusCode = 409,
+    super.debugDetails,
+  ]);
+}
+
 class NetworkException extends AppException {
   const NetworkException([
     super.message = 'Network connection failed',

@@ -189,8 +189,8 @@ class ShareRemoteDataSourceImpl implements ShareRemoteDataSource {
         403,
       );
     } else if (statusCode == 409) {
-      throw ServerException(
-        'Tautan berbagi untuk entitas ini sudah aktif di server ($resourceName)',
+      throw ConflictException(
+        'Tautan berbagi aktif untuk entitas ini sudah terdaftar di server ($resourceName)',
         409,
       );
     } else if (statusCode == 404) {

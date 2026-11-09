@@ -27,6 +27,8 @@ import 'package:gpsku/features/notifications/presentation/providers/notification
 import 'package:gpsku/features/notifications/presentation/providers/notifications_provider.dart';
 import 'package:gpsku/features/notifications/presentation/widgets/emergency_alert_banner.dart';
 import 'package:gpsku/features/notifications/presentation/widgets/notifications_drawer.dart';
+import 'package:gpsku/features/share/presentation/providers/share_provider.dart';
+import 'package:gpsku/features/share/presentation/widgets/share_link_bottom_sheet.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -243,6 +245,11 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 }
                 try {
                   context.read<EventStreamService>().clearBuffer();
+                } on ProviderNotFoundException {
+                  // Ignored in partial test harness
+                }
+                try {
+                  context.read<ShareProvider>().clearState();
                 } on ProviderNotFoundException {
                   // Ignored in partial test harness
                 }
@@ -480,6 +487,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                                         context,
                                         device: selectedDevice,
                                         position: selectedPosition,
+                                      );
+                                    },
+                                    onSharePressed: () {
+                                      ShareLinkBottomSheet.show(
+                                        context,
+                                        device: selectedDevice,
                                       );
                                     },
                                     onHistoryPressed: () {

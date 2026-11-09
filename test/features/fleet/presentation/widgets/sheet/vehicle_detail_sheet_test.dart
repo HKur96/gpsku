@@ -318,6 +318,32 @@ void main() {
       },
     );
 
+    testWidgets('TC-VDS-04D: Tapping Bagikan fires onSharePressed callback', (
+      tester,
+    ) async {
+      bool shareTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VehicleDetailSheet(
+              device: sampleDevice,
+              position: samplePosition,
+              onSharePressed: () => shareTapped = true,
+            ),
+          ),
+        ),
+      );
+
+      final shareButton = find.byKey(const Key('vehicle_sheet_share_button'));
+      expect(shareButton, findsOneWidget);
+
+      await tester.tap(shareButton);
+      await tester.pump();
+
+      expect(shareTapped, isTrue);
+    });
+
     testWidgets(
       'TC-VDS-05: Real-time update updates metrics without widget recreation',
       (tester) async {

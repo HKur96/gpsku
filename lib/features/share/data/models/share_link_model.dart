@@ -35,10 +35,20 @@ class ShareLinkModel {
   }) : attributes = Map.unmodifiable(Map<String, dynamic>.from(attributes));
 
   /// Helper utility to construct a standard Traccar Web / GPSku share URL.
+  ///
+  /// Cleans and sanitizes baseUrl by stripping trailing slashes and any trailing `/api` path segment
+  /// (e.g. `https://demo.traccar.org/api` or `https://demo.traccar.org/api/` -> `https://demo.traccar.org/?token={token}`).
   static String buildShareUrl(String baseUrl, String token) {
-    final cleanBase = baseUrl.endsWith('/')
-        ? baseUrl.substring(0, baseUrl.length - 1)
-        : baseUrl;
+    var cleanBase = baseUrl.trim();
+    if (cleanBase.endsWith('/')) {
+      cleanBase = cleanBase.substring(0, cleanBase.length - 1);
+    }
+    if (cleanBase.endsWith('/api')) {
+      cleanBase = cleanBase.substring(0, cleanBase.length - 4);
+    }
+    if (cleanBase.endsWith('/')) {
+      cleanBase = cleanBase.substring(0, cleanBase.length - 1);
+    }
     return '$cleanBase/?token=$token';
   }
 

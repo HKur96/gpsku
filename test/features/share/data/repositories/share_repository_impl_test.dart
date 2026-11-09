@@ -202,8 +202,8 @@ void main() {
 
     test('TC-SRI-07: Maps ServerException to Left(ServerFailure)', () async {
       mockRemoteDataSource.exceptionToThrow = const ServerException(
-        'Conflict',
-        409,
+        'Internal server error',
+        500,
       );
 
       final result = await repository.generateShareLink(
@@ -214,9 +214,31 @@ void main() {
       expect(result.isLeft(), isTrue);
       result.fold((failure) {
         expect(failure, isA<ServerFailure>());
-        expect(failure.statusCode, 409);
+        expect(failure.statusCode, 500);
       }, (_) => fail('Must fail'));
     });
+
+    test(
+      'TC-SRI-07B: Maps ConflictException to Left(ConflictFailure)',
+      () async {
+        mockRemoteDataSource.exceptionToThrow = const ConflictException(
+          'Active link already exists',
+          409,
+        );
+
+        final result = await repository.generateShareLink(
+          42,
+          const Duration(hours: 1),
+        );
+
+        expect(result.isLeft(), isTrue);
+        result.fold((failure) {
+          expect(failure, isA<ConflictFailure>());
+          expect(failure.statusCode, 409);
+          expect(failure.message, contains('Active link already exists'));
+        }, (_) => fail('Must fail'));
+      },
+    );
 
     test(
       'TC-SRI-08: Maps ConnectionTimeoutException to Left(TimeoutFailure)',

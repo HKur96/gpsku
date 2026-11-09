@@ -165,7 +165,7 @@ void main() {
     );
 
     test(
-      'TC-SRD-05: createDeviceShareToken throws ServerException(409) on Conflict',
+      'TC-SRD-05: createDeviceShareToken throws ConflictException(409) on Conflict',
       () async {
         mockDio.exceptionToThrow = DioException(
           requestOptions: RequestOptions(path: ApiEndpoints.shareDevice),
@@ -181,7 +181,7 @@ void main() {
             expiration: tFutureExpiration,
           ),
           throwsA(
-            isA<ServerException>().having(
+            isA<ConflictException>().having(
               (e) => e.statusCode,
               'statusCode',
               409,

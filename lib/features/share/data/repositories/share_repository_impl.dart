@@ -64,6 +64,8 @@ class ShareRepositoryImpl implements ShareRepository {
       return Left(AuthFailure(e.message, statusCode: e.statusCode));
     } on ForbiddenException catch (e) {
       return Left(ForbiddenFailure(e.message, statusCode: e.statusCode));
+    } on ConflictException catch (e) {
+      return Left(ConflictFailure(e.message, statusCode: e.statusCode));
     } on ConnectionTimeoutException catch (e) {
       return Left(TimeoutFailure(e.message, statusCode: e.statusCode));
     } on NetworkException catch (e) {
@@ -118,6 +120,8 @@ class ShareRepositoryImpl implements ShareRepository {
       return Left(AuthFailure(e.message, statusCode: e.statusCode));
     } on ForbiddenException catch (e) {
       return Left(ForbiddenFailure(e.message, statusCode: e.statusCode));
+    } on ConflictException catch (e) {
+      return Left(ConflictFailure(e.message, statusCode: e.statusCode));
     } on ConnectionTimeoutException catch (e) {
       return Left(TimeoutFailure(e.message, statusCode: e.statusCode));
     } on NetworkException catch (e) {

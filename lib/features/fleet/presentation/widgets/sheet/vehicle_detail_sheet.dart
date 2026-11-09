@@ -7,6 +7,7 @@ import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/data/models/position_model.dart';
 import 'package:gpsku/features/maintenance/domain/helpers/maintenance_progress_helper.dart';
 import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
+import 'package:gpsku/features/share/presentation/widgets/share_link_bottom_sheet.dart';
 
 /// Interactive telemetry bottom sheet displaying essential device and position metrics.
 ///
@@ -22,6 +23,7 @@ class VehicleDetailSheet extends StatelessWidget {
   final VoidCallback? onCenterToVehicle;
   final VoidCallback? onCommandsPressed;
   final VoidCallback? onHistoryPressed;
+  final VoidCallback? onSharePressed;
 
   const VehicleDetailSheet({
     super.key,
@@ -31,6 +33,7 @@ class VehicleDetailSheet extends StatelessWidget {
     this.onCenterToVehicle,
     this.onCommandsPressed,
     this.onHistoryPressed,
+    this.onSharePressed,
   });
 
   @override
@@ -317,6 +320,23 @@ class VehicleDetailSheet extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
             onPressed: onHistoryPressed,
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // Share Button (Public Share Link via F-37)
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const Key('vehicle_sheet_share_button'),
+            icon: const Icon(Icons.share_outlined, size: 16),
+            label: const Text('Bagikan', style: TextStyle(fontSize: 12)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed:
+                onSharePressed ??
+                () => ShareLinkBottomSheet.show(context, device: device),
           ),
         ),
       ],
