@@ -37,6 +37,12 @@ class ApiEndpoints {
   static const String shareGroup = '/api/share/group';
   static const String sessionToken = '/api/session/token';
 
+  // Computed Attributes & JEXL Expressions (Feature F-38)
+  static const String attributesComputed = '/api/attributes/computed';
+  static String attributesComputedById(int id) =>
+      '/api/attributes/computed/$id';
+  static const String attributesComputedTest = '/api/attributes/computed/test';
+
   // Native WebSocket Endpoint
   static const String socket = '/api/socket';
 

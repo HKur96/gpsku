@@ -47,6 +47,10 @@ import 'features/share/data/datasources/share_remote_data_source.dart';
 import 'features/share/data/repositories/share_repository_impl.dart';
 import 'features/share/domain/repositories/share_repository.dart';
 import 'features/share/presentation/providers/share_provider.dart';
+import 'features/attributes/data/datasources/computed_attributes_remote_data_source.dart';
+import 'features/attributes/data/repositories/computed_attributes_repository_impl.dart';
+import 'features/attributes/domain/repositories/computed_attributes_repository.dart';
+import 'features/attributes/presentation/providers/computed_attributes_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -149,6 +153,15 @@ void main() async {
     appConfig: appConfig,
   );
   final shareProvider = ShareProvider(repository: shareRepository);
+
+  final computedAttributesRemoteDataSource =
+      ComputedAttributesRemoteDataSourceImpl(dioClient: dioClient);
+  final computedAttributesRepository = ComputedAttributesRepositoryImpl(
+    remoteDataSource: computedAttributesRemoteDataSource,
+  );
+  final computedAttributesProvider = ComputedAttributesProvider(
+    repository: computedAttributesRepository,
+  );
   final eventStreamService = EventStreamService(
     webSocketService: webSocketService,
   );
@@ -211,6 +224,12 @@ void main() async {
           ),
           Provider<ShareRemoteDataSource>.value(value: shareRemoteDataSource),
           Provider<ShareRepository>.value(value: shareRepository),
+          Provider<ComputedAttributesRemoteDataSource>.value(
+            value: computedAttributesRemoteDataSource,
+          ),
+          Provider<ComputedAttributesRepository>.value(
+            value: computedAttributesRepository,
+          ),
           Provider<EventStreamService>.value(value: eventStreamService),
           ChangeNotifierProvider<AlarmAudioService>.value(
             value: alarmAudioService,
@@ -229,6 +248,9 @@ void main() async {
           ),
           ChangeNotifierProvider<DriversProvider>.value(value: driversProvider),
           ChangeNotifierProvider<ShareProvider>.value(value: shareProvider),
+          ChangeNotifierProvider<ComputedAttributesProvider>.value(
+            value: computedAttributesProvider,
+          ),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,
           ),

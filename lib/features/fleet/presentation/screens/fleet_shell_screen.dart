@@ -29,6 +29,8 @@ import 'package:gpsku/features/notifications/presentation/widgets/emergency_aler
 import 'package:gpsku/features/notifications/presentation/widgets/notifications_drawer.dart';
 import 'package:gpsku/features/share/presentation/providers/share_provider.dart';
 import 'package:gpsku/features/share/presentation/widgets/share_link_bottom_sheet.dart';
+import 'package:gpsku/features/attributes/presentation/providers/computed_attributes_provider.dart';
+import 'package:gpsku/features/attributes/presentation/widgets/computed_attributes_drawer.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -116,6 +118,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
       notifications = context.watch<NotificationsProvider>();
     } on ProviderNotFoundException {
       notifications = null;
+    }
+    ComputedAttributesProvider? computedAttributes;
+    try {
+      computedAttributes = context.watch<ComputedAttributesProvider>();
+    } on ProviderNotFoundException {
+      computedAttributes = null;
     }
     final user = auth.currentUser;
 
@@ -210,6 +218,15 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   DriverListDrawer.show(context);
                 },
               ),
+            if (computedAttributes != null)
+              IconButton(
+                key: const Key('computed_attributes_drawer_action_button'),
+                icon: const Icon(Icons.calculate_outlined),
+                tooltip: 'Atribut Sensor Terhitung',
+                onPressed: () {
+                  ComputedAttributesDrawer.show(context);
+                },
+              ),
             if (notifications != null)
               IconButton(
                 key: const Key('notifications_drawer_action_button'),
@@ -237,6 +254,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 geofences?.clearGeofences();
                 maintenance?.clearMaintenance();
                 drivers?.clearDrivers();
+                computedAttributes?.clearState();
                 notifications?.clearAll();
                 try {
                   context.read<NotificationSettingsProvider>().clearSettings();
