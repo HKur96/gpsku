@@ -225,6 +225,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 },
               ),
             IconButton(
+              key: const Key('fleet_app_bar_logout_button'),
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
               onPressed: () async {

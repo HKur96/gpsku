@@ -43,6 +43,9 @@ import 'features/notifications/domain/services/event_stream_service.dart';
 import 'features/notifications/presentation/providers/notification_settings_provider.dart';
 import 'features/notifications/presentation/providers/notifications_provider.dart';
 import 'features/notifications/presentation/services/alarm_audio_service.dart';
+import 'features/share/data/datasources/share_remote_data_source.dart';
+import 'features/share/data/repositories/share_repository_impl.dart';
+import 'features/share/domain/repositories/share_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +142,11 @@ void main() async {
   final notificationsRepository = NotificationsRepositoryImpl(
     remoteDataSource: notificationsRemoteDataSource,
   );
+  final shareRemoteDataSource = ShareRemoteDataSourceImpl(dioClient: dioClient);
+  final shareRepository = ShareRepositoryImpl(
+    remoteDataSource: shareRemoteDataSource,
+    appConfig: appConfig,
+  );
   final eventStreamService = EventStreamService(
     webSocketService: webSocketService,
   );
@@ -199,6 +207,8 @@ void main() async {
           Provider<NotificationsRepository>.value(
             value: notificationsRepository,
           ),
+          Provider<ShareRemoteDataSource>.value(value: shareRemoteDataSource),
+          Provider<ShareRepository>.value(value: shareRepository),
           Provider<EventStreamService>.value(value: eventStreamService),
           ChangeNotifierProvider<AlarmAudioService>.value(
             value: alarmAudioService,

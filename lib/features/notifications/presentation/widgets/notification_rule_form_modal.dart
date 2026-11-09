@@ -107,6 +107,7 @@ class _NotificationRuleFormModalState extends State<NotificationRuleFormModal> {
 
     if (!mounted) return;
 
+    ScaffoldMessenger.of(context).clearSnackBars();
     if (successCount == channelsToTest.length) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

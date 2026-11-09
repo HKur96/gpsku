@@ -32,6 +32,11 @@ class ApiEndpoints {
   static const String commandsSend = '/api/commands/send';
   static const String permissions = '/api/permissions';
 
+  // Public Share Links & Temporary Access (Feature F-37)
+  static const String shareDevice = '/api/share/device';
+  static const String shareGroup = '/api/share/group';
+  static const String sessionToken = '/api/session/token';
+
   // Native WebSocket Endpoint
   static const String socket = '/api/socket';
 

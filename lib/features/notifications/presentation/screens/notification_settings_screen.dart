@@ -592,7 +592,7 @@ class _ChannelTestSheet extends StatelessWidget {
                   shrinkWrap: true,
                   itemCount: notificators.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
+                  itemBuilder: (_, index) {
                     final notif = notificators[index];
                     final isTesting = provider.testingNotificator == notif.type;
                     final label =
@@ -630,11 +630,15 @@ class _ChannelTestSheet extends StatelessWidget {
                         onPressed: isTesting
                             ? null
                             : () async {
+                                final scaffoldMessenger = ScaffoldMessenger.of(
+                                  context,
+                                );
                                 final success = await provider.testNotificator(
                                   notif.type,
                                 );
                                 if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                scaffoldMessenger.clearSnackBars();
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       success
