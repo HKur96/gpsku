@@ -31,6 +31,8 @@ import 'package:gpsku/features/share/presentation/providers/share_provider.dart'
 import 'package:gpsku/features/share/presentation/widgets/share_link_bottom_sheet.dart';
 import 'package:gpsku/features/attributes/presentation/providers/computed_attributes_provider.dart';
 import 'package:gpsku/features/attributes/presentation/widgets/computed_attributes_drawer.dart';
+import 'package:gpsku/features/emulator/presentation/providers/telemetry_emulator_provider.dart';
+import 'package:gpsku/features/emulator/presentation/widgets/telemetry_emulator_sheet.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -124,6 +126,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
       computedAttributes = context.watch<ComputedAttributesProvider>();
     } on ProviderNotFoundException {
       computedAttributes = null;
+    }
+    TelemetryEmulatorProvider? telemetryEmulator;
+    try {
+      telemetryEmulator = context.watch<TelemetryEmulatorProvider>();
+    } on ProviderNotFoundException {
+      telemetryEmulator = null;
     }
     final user = auth.currentUser;
 
@@ -227,6 +235,18 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   ComputedAttributesDrawer.show(context);
                 },
               ),
+            if (telemetryEmulator != null)
+              IconButton(
+                key: const Key('telemetry_emulator_action_button'),
+                icon: const Icon(Icons.sensors_outlined),
+                tooltip: 'Simulator Telemetri',
+                onPressed: () {
+                  TelemetryEmulatorSheet.show(
+                    context,
+                    initialDevice: selectedDevice,
+                  );
+                },
+              ),
             if (notifications != null)
               IconButton(
                 key: const Key('notifications_drawer_action_button'),
@@ -255,6 +275,7 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                 maintenance?.clearMaintenance();
                 drivers?.clearDrivers();
                 computedAttributes?.clearState();
+                telemetryEmulator?.clearState();
                 notifications?.clearAll();
                 try {
                   context.read<NotificationSettingsProvider>().clearSettings();

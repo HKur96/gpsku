@@ -51,6 +51,10 @@ import 'features/attributes/data/datasources/computed_attributes_remote_data_sou
 import 'features/attributes/data/repositories/computed_attributes_repository_impl.dart';
 import 'features/attributes/domain/repositories/computed_attributes_repository.dart';
 import 'features/attributes/presentation/providers/computed_attributes_provider.dart';
+import 'features/emulator/data/datasources/telemetry_emulator_remote_data_source.dart';
+import 'features/emulator/data/repositories/telemetry_emulator_repository_impl.dart';
+import 'features/emulator/domain/repositories/telemetry_emulator_repository.dart';
+import 'features/emulator/presentation/providers/telemetry_emulator_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -162,6 +166,15 @@ void main() async {
   final computedAttributesProvider = ComputedAttributesProvider(
     repository: computedAttributesRepository,
   );
+
+  final telemetryEmulatorRemoteDataSource =
+      TelemetryEmulatorRemoteDataSourceImpl(appConfig: appConfig);
+  final telemetryEmulatorRepository = TelemetryEmulatorRepositoryImpl(
+    remoteDataSource: telemetryEmulatorRemoteDataSource,
+  );
+  final telemetryEmulatorProvider = TelemetryEmulatorProvider(
+    repository: telemetryEmulatorRepository,
+  );
   final eventStreamService = EventStreamService(
     webSocketService: webSocketService,
   );
@@ -230,6 +243,12 @@ void main() async {
           Provider<ComputedAttributesRepository>.value(
             value: computedAttributesRepository,
           ),
+          Provider<TelemetryEmulatorRemoteDataSource>.value(
+            value: telemetryEmulatorRemoteDataSource,
+          ),
+          Provider<TelemetryEmulatorRepository>.value(
+            value: telemetryEmulatorRepository,
+          ),
           Provider<EventStreamService>.value(value: eventStreamService),
           ChangeNotifierProvider<AlarmAudioService>.value(
             value: alarmAudioService,
@@ -250,6 +269,9 @@ void main() async {
           ChangeNotifierProvider<ShareProvider>.value(value: shareProvider),
           ChangeNotifierProvider<ComputedAttributesProvider>.value(
             value: computedAttributesProvider,
+          ),
+          ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+            value: telemetryEmulatorProvider,
           ),
           ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
             value: fleetSyncCoordinator,

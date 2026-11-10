@@ -49,4 +49,7 @@ class ApiEndpoints {
   // Video Streaming
   static String liveStream(int deviceId, int channel) =>
       '/api/stream/$deviceId/$channel/live.m3u8';
+
+  // Telemetry Protocol Emulation (Feature F-39)
+  static const int osmandPort = 5055;
 }

@@ -25,6 +25,18 @@ class AppConfig {
     );
   }
 
+  /// Derives OsmAnd protocol ingestion URI from base URL host and port (default: 5055).
+  /// Defaults to plain 'http' scheme to avoid SSL handshake failures against Netty TrackerServer.
+  Uri getOsmandUri({int port = 5055, String scheme = 'http'}) {
+    final uri = Uri.parse(baseUrl);
+    return uri.replace(
+      scheme: scheme,
+      port: port,
+      path: '/',
+      queryParameters: null,
+    );
+  }
+
   AppConfig copyWith({
     String? baseUrl,
     Duration? connectTimeout,
