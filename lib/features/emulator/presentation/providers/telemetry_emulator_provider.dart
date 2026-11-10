@@ -1,30 +1,65 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../fleet/data/models/device_model.dart';
 import '../../../fleet/data/models/position_model.dart';
 import '../../../reports/presentation/playback/route_geodesic_helper.dart';
+import '../../data/models/osmand_transport_diagnostics.dart';
 import '../../data/models/telemetry_packet_model.dart';
 import '../../domain/repositories/telemetry_emulator_repository.dart';
 
 /// Status of the active telemetry simulation session.
 enum EmulatorSimulationStatus { idle, sendingSingleFix, simulating, paused }
 
-/// Status of the Traccar OsmAnd port (port 5055) reachability probe.
-enum OsmandPortStatus { unknown, probing, reachable, unreachable }
+/// Status of the Traccar OsmAnd endpoint reachability probe.
+enum OsmandPortStatus {
+  unknown,
+  probing,
+  reachable,
+  reachableViaFallback,
+  unreachable,
+}
 
 /// State management for the GPS Telemetry Emulator and Route Simulator Engine.
 class TelemetryEmulatorProvider extends ChangeNotifier {
   final TelemetryEmulatorRepository repository;
+  final AuthProvider? authProvider;
 
-  TelemetryEmulatorProvider({required this.repository});
+  TelemetryEmulatorProvider({required this.repository, this.authProvider}) {
+    authProvider?.addListener(_onAuthChanged);
+  }
+
+  /// Validates WGS-84 geographic coordinates without rejecting (0.0, 0.0).
+  /// Rejects NaN, Infinity, |lat| > 90, and |lon| > 180.
+  static bool isValidCoordinate(double lat, double lon) {
+    if (lat.isNaN || lat.isInfinite || lon.isNaN || lon.isInfinite) {
+      return false;
+    }
+    return lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0;
+  }
+
+  bool get isDeveloperAuthorized =>
+      authProvider == null ? true : authProvider!.canAccessDeveloperTools;
 
   EmulatorSimulationStatus _simulationStatus = EmulatorSimulationStatus.idle;
   EmulatorSimulationStatus get simulationStatus => _simulationStatus;
 
   OsmandPortStatus _portStatus = OsmandPortStatus.unknown;
   OsmandPortStatus get portStatus => _portStatus;
+
+  bool get isPortConnected =>
+      _portStatus == OsmandPortStatus.reachable ||
+      _portStatus == OsmandPortStatus.reachableViaFallback;
+
+  OsmandTransportDiagnostics? _lastTransportDiagnostics;
+  OsmandTransportDiagnostics? get lastTransportDiagnostics =>
+      _lastTransportDiagnostics;
+
+  bool _isMapPickMode = false;
+  bool get isMapPickMode => _isMapPickMode;
 
   String? _lastErrorMessage;
   String? get lastErrorMessage => _lastErrorMessage;
@@ -86,6 +121,11 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
   Duration get simulationInterval => _simulationInterval;
 
   Timer? _simulationTimer;
+  CancelToken? _activeCancelToken;
+  bool _isTransmittingStep = false;
+  bool _isDisposed = false;
+  String? _activeCustomHost;
+  int? _activeCustomPort;
   List<LatLng> _simulationWaypoints = [];
   List<LatLng> get simulationWaypoints =>
       List.unmodifiable(_simulationWaypoints);
@@ -98,16 +138,92 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
   bool get isBusy =>
       _simulationStatus == EmulatorSimulationStatus.sendingSingleFix;
 
+  void _safeNotify() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+  }
+
+  void _onAuthChanged() {
+    if (!isDeveloperAuthorized) {
+      if (_isMapPickMode ||
+          isSimulating ||
+          isPaused ||
+          _targetUniqueId.isNotEmpty ||
+          _lastTransportDiagnostics != null) {
+        clearState();
+      }
+    }
+  }
+
+  OsmandTransportDiagnostics? _readRepositoryDiagnostics() {
+    if (repository case final OsmandTransportDiagnosticsProvider diagProvider) {
+      return diagProvider.lastTransportDiagnostics;
+    }
+    return null;
+  }
+
+  void _cancelActiveRequests() {
+    if (_activeCancelToken != null && !_activeCancelToken!.isCancelled) {
+      _activeCancelToken!.cancel('Telemetry emulator operation cancelled');
+    }
+    _activeCancelToken = null;
+  }
+
+  /// Toggles interactive map-tap coordinate picking mode.
+  /// Enforces developer authorization before enabling.
+  bool setMapPickMode(bool enabled) {
+    if (enabled && !isDeveloperAuthorized) {
+      _lastErrorMessage =
+          'Akses Mode Pengembang ditolak: hanya Administrator aktif (non-readonly) yang diizinkan.';
+      _safeNotify();
+      return false;
+    }
+    _isMapPickMode = enabled;
+    if (enabled) {
+      _lastErrorMessage = null;
+    }
+    _safeNotify();
+    return true;
+  }
+
+  /// Injects coordinates from a map tap into emulator state WITHOUT transmitting telemetry.
+  /// Accepts valid WGS-84 coordinates including (0.0, 0.0), while rejecting NaN/Infinity/out-of-range.
+  bool setMapPickedCoordinates(double lat, double lon) {
+    if (!isDeveloperAuthorized) {
+      _lastErrorMessage =
+          'Akses Mode Pengembang ditolak: hanya Administrator aktif (non-readonly) yang diizinkan.';
+      _safeNotify();
+      return false;
+    }
+    if (!isValidCoordinate(lat, lon)) {
+      _lastErrorMessage =
+          'Koordinat peta tidak valid (Latitude -90..90, Longitude -180..180, bukan NaN/Infinity).';
+      _safeNotify();
+      return false;
+    }
+    _currentLat = lat;
+    _currentLon = lon;
+    _lastErrorMessage = null;
+    _safeNotify();
+    return true;
+  }
+
   /// Prefills active target parameters from selected [device] and optional [lastPosition].
   /// Enforces mapping [device.uniqueId] (IMEI/Serial), NOT integer [device.id].
   void setTargetDevice(DeviceModel device, [PositionModel? lastPosition]) {
     _targetUniqueId = device.uniqueId;
     _targetDeviceName = device.name;
     if (lastPosition != null) {
-      _currentLat = lastPosition.latitude;
-      _currentLon = lastPosition.longitude;
-      _currentSpeed = lastPosition.speed * 1.852; // knots to km/h
-      _currentBearing = lastPosition.course;
+      if (isValidCoordinate(lastPosition.latitude, lastPosition.longitude)) {
+        _currentLat = lastPosition.latitude;
+        _currentLon = lastPosition.longitude;
+      }
+      _currentSpeed = (lastPosition.speed * 1.852).clamp(
+        0.0,
+        160.0,
+      ); // knots to km/h, safely bounded to UI slider max
+      _currentBearing = (lastPosition.course % 360.0 + 360.0) % 360.0;
       _currentAltitude = lastPosition.altitude;
       if (lastPosition.attributes.containsKey('ignition')) {
         _isIgnitionOn = lastPosition.attributes['ignition'] == true;
@@ -119,67 +235,80 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
         _currentBattery = rawBatt.toDouble().clamp(0.0, 100.0);
       }
     }
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Sets manual target unique ID.
   void setTargetUniqueId(String uniqueId, [String? deviceName]) {
     _targetUniqueId = uniqueId.trim();
     if (deviceName != null) _targetDeviceName = deviceName;
-    notifyListeners();
+    _safeNotify();
   }
 
-  /// Updates current simulation coordinate.
+  static double _normalizeLongitude(double lon) {
+    if (lon >= -180.0 && lon <= 180.0) return lon;
+    return ((lon + 540.0) % 360.0) - 180.0;
+  }
+
+  /// Updates current simulation coordinate (guards against NaN/Infinity).
   void updateCoordinates({required double lat, required double lon}) {
-    _currentLat = lat;
-    _currentLon = lon;
-    notifyListeners();
+    if (lat.isNaN || lat.isInfinite || lon.isNaN || lon.isInfinite) {
+      return;
+    }
+    _currentLat = lat.clamp(-90.0, 90.0);
+    _currentLon = _normalizeLongitude(lon);
+    _safeNotify();
   }
 
   /// Updates current vehicle speed in km/h.
   void updateSpeed(double speedKmh) {
     _currentSpeed = speedKmh.clamp(0.0, 200.0);
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Updates vehicle heading / bearing in degrees [0, 360).
   void updateBearing(double bearing) {
     _currentBearing = (bearing % 360.0 + 360.0) % 360.0;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Updates vehicle altitude in meters.
   void updateAltitude(double altitude) {
     _currentAltitude = altitude;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Updates vehicle battery percentage [0, 100].
   void updateBattery(double battery) {
     _currentBattery = battery.clamp(0.0, 100.0);
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Sets vehicle engine ignition contact switch state.
   void setIgnition(bool ignition) {
     _isIgnitionOn = ignition;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Sets active simulation timer step interval (e.g. 1s, 2s, 5s).
   void setSimulationInterval(Duration interval) {
+    if (interval.inMilliseconds <= 0) return;
     _simulationInterval = interval;
     if (isSimulating) {
-      _startTimer();
+      _startTimer(customHost: _activeCustomHost, customPort: _activeCustomPort);
     }
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Sets custom waypoint route path for simulation.
   void setWaypoints(List<LatLng> waypoints) {
     _simulationWaypoints = List.of(waypoints);
     _currentWaypointIndex = 0;
-    if (waypoints.isNotEmpty) {
+    if (waypoints.isNotEmpty &&
+        isValidCoordinate(
+          waypoints.first.latitude,
+          waypoints.first.longitude,
+        )) {
       _currentLat = waypoints.first.latitude;
       _currentLon = waypoints.first.longitude;
       if (waypoints.length > 1) {
@@ -189,39 +318,62 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
         );
       }
     }
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Clears waypoints path, falling back to constant-bearing vector simulation.
   void clearWaypoints() {
     _simulationWaypoints = [];
     _currentWaypointIndex = 0;
-    notifyListeners();
+    _safeNotify();
   }
 
-  /// Probes reachability of the OsmAnd protocol listener on port 5055.
+  /// Probes reachability of the OsmAnd endpoint (direct port 5055, HTTPS proxy, or fallback 8082).
   Future<bool> probePort({String? customHost, int? customPort}) async {
+    if (!isDeveloperAuthorized) {
+      _portStatus = OsmandPortStatus.unreachable;
+      _lastErrorMessage =
+          'Akses Mode Pengembang ditolak: hanya Administrator aktif (non-readonly) yang diizinkan.';
+      _safeNotify();
+      return false;
+    }
+
     _portStatus = OsmandPortStatus.probing;
-    notifyListeners();
+    _lastErrorMessage = null;
+    _safeNotify();
+
+    final cancelToken = CancelToken();
+    _activeCancelToken = cancelToken;
 
     final result = await repository.probePort(
       customHost: customHost,
       customPort: customPort,
+      cancelToken: cancelToken,
     );
+
+    if (_isDisposed) return false;
+
+    _lastTransportDiagnostics = _readRepositoryDiagnostics();
 
     return result.fold(
       (failure) {
         _portStatus = OsmandPortStatus.unreachable;
         _lastErrorMessage = failure.message;
-        notifyListeners();
+        _safeNotify();
         return false;
       },
       (reachable) {
-        _portStatus = reachable
-            ? OsmandPortStatus.reachable
-            : OsmandPortStatus.unreachable;
-        notifyListeners();
-        return reachable;
+        if (!reachable) {
+          _portStatus = OsmandPortStatus.unreachable;
+          _safeNotify();
+          return false;
+        }
+        final isFallback = _lastTransportDiagnostics?.isFallbackProxy ?? false;
+        _portStatus = isFallback
+            ? OsmandPortStatus.reachableViaFallback
+            : OsmandPortStatus.reachable;
+        _safeNotify();
+        return true;
       },
     );
   }
@@ -246,59 +398,84 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
     );
   }
 
-  /// Transmits a single telemetry fix coordinate to Traccar OsmAnd port 5055.
+  /// Transmits a single telemetry fix coordinate to Traccar OsmAnd endpoint.
   Future<bool> sendSingleFix({String? customHost, int? customPort}) async {
+    if (!isDeveloperAuthorized) {
+      _lastErrorMessage =
+          'Akses Mode Pengembang ditolak: hanya Administrator aktif (non-readonly) yang diizinkan.';
+      _safeNotify();
+      return false;
+    }
     if (_targetUniqueId.isEmpty) {
       _lastErrorMessage = 'Unique ID perangkat target belum dipilih';
-      notifyListeners();
+      _safeNotify();
       return false;
     }
 
     _simulationStatus = EmulatorSimulationStatus.sendingSingleFix;
     _lastErrorMessage = null;
-    notifyListeners();
+    _safeNotify();
 
+    final cancelToken = CancelToken();
+    _activeCancelToken = cancelToken;
     final packet = buildCurrentPacket();
     final result = await repository.sendTelemetry(
       packet: packet,
       customHost: customHost,
       customPort: customPort,
+      cancelToken: cancelToken,
     );
+
+    if (_isDisposed) return false;
 
     _simulationStatus = EmulatorSimulationStatus.idle;
     _lastTransmissionTime = DateTime.now();
+    _lastTransportDiagnostics = _readRepositoryDiagnostics();
 
     return result.fold(
       (failure) {
         _transmissionFailureCount++;
         _lastErrorMessage = failure.message;
         _lastStatusCode = failure.statusCode ?? 500;
-        notifyListeners();
+        _safeNotify();
         return false;
       },
       (success) {
         _transmissionSuccessCount++;
         _lastStatusCode = 200;
-        _portStatus = OsmandPortStatus.reachable;
-        notifyListeners();
+        final isFallback = _lastTransportDiagnostics?.isFallbackProxy ?? false;
+        _portStatus = isFallback
+            ? OsmandPortStatus.reachableViaFallback
+            : OsmandPortStatus.reachable;
+        _safeNotify();
         return true;
       },
     );
   }
 
-  /// Starts the automated periodic path simulation engine.
-  void startSimulation({String? customHost, int? customPort}) {
+  /// Starts or resumes the automated periodic path simulation engine.
+  bool startSimulation({String? customHost, int? customPort}) {
+    if (!isDeveloperAuthorized) {
+      _lastErrorMessage =
+          'Akses Mode Pengembang ditolak: hanya Administrator aktif (non-readonly) yang diizinkan.';
+      _safeNotify();
+      return false;
+    }
     if (_targetUniqueId.isEmpty) {
       _lastErrorMessage =
           'Pilih perangkat target sebelum memulai simulasi rute';
-      notifyListeners();
-      return;
+      _safeNotify();
+      return false;
     }
+    if (isSimulating) return true;
 
+    _activeCustomHost = customHost;
+    _activeCustomPort = customPort;
     _simulationStatus = EmulatorSimulationStatus.simulating;
     _lastErrorMessage = null;
     _startTimer(customHost: customHost, customPort: customPort);
-    notifyListeners();
+    _safeNotify();
+    return true;
   }
 
   void _startTimer({String? customHost, int? customPort}) {
@@ -312,30 +489,54 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
     String? customHost,
     int? customPort,
   }) async {
-    if (_simulationStatus != EmulatorSimulationStatus.simulating) return;
+    if (_isDisposed ||
+        !isDeveloperAuthorized ||
+        _simulationStatus != EmulatorSimulationStatus.simulating ||
+        _isTransmittingStep) {
+      return;
+    }
 
-    _advancePosition();
-    final packet = buildCurrentPacket();
-    final result = await repository.sendTelemetry(
-      packet: packet,
-      customHost: customHost,
-      customPort: customPort,
-    );
+    _isTransmittingStep = true;
+    final cancelToken = CancelToken();
+    _activeCancelToken = cancelToken;
 
-    _lastTransmissionTime = DateTime.now();
-    result.fold(
-      (failure) {
-        _transmissionFailureCount++;
-        _lastErrorMessage = failure.message;
-        _lastStatusCode = failure.statusCode ?? 500;
-      },
-      (success) {
-        _transmissionSuccessCount++;
-        _lastStatusCode = 200;
-        _portStatus = OsmandPortStatus.reachable;
-      },
-    );
-    notifyListeners();
+    try {
+      _advancePosition();
+      final packet = buildCurrentPacket();
+      final result = await repository.sendTelemetry(
+        packet: packet,
+        customHost: customHost,
+        customPort: customPort,
+        cancelToken: cancelToken,
+      );
+
+      if (_isDisposed ||
+          _simulationStatus != EmulatorSimulationStatus.simulating) {
+        return;
+      }
+
+      _lastTransmissionTime = DateTime.now();
+      _lastTransportDiagnostics = _readRepositoryDiagnostics();
+      result.fold(
+        (failure) {
+          _transmissionFailureCount++;
+          _lastErrorMessage = failure.message;
+          _lastStatusCode = failure.statusCode ?? 500;
+        },
+        (success) {
+          _transmissionSuccessCount++;
+          _lastStatusCode = 200;
+          final isFallback =
+              _lastTransportDiagnostics?.isFallbackProxy ?? false;
+          _portStatus = isFallback
+              ? OsmandPortStatus.reachableViaFallback
+              : OsmandPortStatus.reachable;
+        },
+      );
+      _safeNotify();
+    } finally {
+      _isTransmittingStep = false;
+    }
   }
 
   void _advancePosition() {
@@ -416,33 +617,54 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
           math.cos(distRatio) - math.sin(lat1) * math.sin(lat2),
         );
 
-    return LatLng(lat2 * 180.0 / math.pi, lon2 * 180.0 / math.pi);
+    final latDeg = (lat2 * 180.0 / math.pi).clamp(-90.0, 90.0);
+    final lonDeg = _normalizeLongitude(lon2 * 180.0 / math.pi);
+    return LatLng(latDeg, lonDeg);
   }
 
   /// Pauses automated path simulation without clearing coordinates.
   void pauseSimulation() {
+    if (!isSimulating) return;
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    _cancelActiveRequests();
     _simulationStatus = EmulatorSimulationStatus.paused;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Stops automated path simulation and resets status to idle.
   void stopSimulation() {
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    _cancelActiveRequests();
+    _isTransmittingStep = false;
     _simulationStatus = EmulatorSimulationStatus.idle;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// Resets all state and cancels active timers deterministically (e.g. on logout).
   void clearState() {
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    _cancelActiveRequests();
+    _isTransmittingStep = false;
+    _isMapPickMode = false;
+    _activeCustomHost = null;
+    _activeCustomPort = null;
     _simulationStatus = EmulatorSimulationStatus.idle;
     _portStatus = OsmandPortStatus.unknown;
+    _lastTransportDiagnostics = null;
     _targetUniqueId = '';
     _targetDeviceName = null;
+    _currentLat = -6.2088;
+    _currentLon = 106.8456;
+    _currentSpeed = 20.0;
+    _currentBearing = 90.0;
+    _currentAltitude = 25.0;
+    _currentBattery = 85.0;
+    _isIgnitionOn = true;
+    _driverUniqueId = null;
+    _simulationInterval = const Duration(seconds: 2);
     _transmissionSuccessCount = 0;
     _transmissionFailureCount = 0;
     _lastErrorMessage = null;
@@ -450,13 +672,16 @@ class TelemetryEmulatorProvider extends ChangeNotifier {
     _lastTransmissionTime = null;
     _simulationWaypoints = [];
     _currentWaypointIndex = 0;
-    notifyListeners();
+    _safeNotify();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    authProvider?.removeListener(_onAuthChanged);
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    _cancelActiveRequests();
     super.dispose();
   }
 }

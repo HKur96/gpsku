@@ -4,14 +4,21 @@ import 'package:fpdart/fpdart.dart';
 import 'package:gpsku/core/errors/exceptions.dart';
 import 'package:gpsku/core/errors/failures.dart';
 import 'package:gpsku/features/emulator/data/datasources/telemetry_emulator_remote_data_source.dart';
+import 'package:gpsku/features/emulator/data/models/osmand_transport_diagnostics.dart';
 import 'package:gpsku/features/emulator/data/models/telemetry_packet_model.dart';
 import 'package:gpsku/features/emulator/data/repositories/telemetry_emulator_repository_impl.dart';
 
 class MockTelemetryEmulatorRemoteDataSource
-    implements TelemetryEmulatorRemoteDataSource {
+    implements
+        TelemetryEmulatorRemoteDataSource,
+        OsmandTransportDiagnosticsProvider {
   bool sendTelemetryResult = true;
   bool probeOsmandResult = true;
   Exception? exceptionToThrow;
+  OsmandTransportDiagnostics? mockDiagnostics;
+
+  @override
+  OsmandTransportDiagnostics? get lastTransportDiagnostics => mockDiagnostics;
 
   TelemetryPacketModel? lastPacket;
   String? lastCustomHost;
@@ -236,6 +243,28 @@ void main() {
         final result = await repository.probePort();
 
         expect(result, const Left(NetworkFailure('Port unreachable')));
+      },
+    );
+
+    test(
+      'TC-ERI-11: Repository transparently exposes fallback transport diagnostics from datasource',
+      () async {
+        mockDataSource.mockDiagnostics = OsmandTransportDiagnostics(
+          mode: OsmandTransportMode.httpWebProxyFallback,
+          endpointUri: Uri.parse('http://10.0.2.2:8082/'),
+          httpMethod: 'POST',
+          statusCode: 200,
+          initialDirectFailureReason: 'Port 5055 connection refused',
+          timestamp: DateTime.utc(2026, 11, 10),
+        );
+
+        await repository.sendTelemetry(packet: tPacket);
+
+        final diag = repository.lastTransportDiagnostics;
+        expect(diag, isNotNull);
+        expect(diag!.mode, OsmandTransportMode.httpWebProxyFallback);
+        expect(diag.endpointUri.port, 8082);
+        expect(diag.initialDirectFailureReason, contains('5055'));
       },
     );
   });

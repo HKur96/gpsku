@@ -116,10 +116,16 @@ class TelemetryPacketModel {
   }
 
   /// Constructs target [Uri] pointing to the OsmAnd port.
-  Uri toUri(String baseUrl, {int port = 5055, String path = '/'}) {
+  /// Defaults to plain 'http' scheme unless [scheme] is explicitly specified.
+  Uri toUri(
+    String baseUrl, {
+    int port = 5055,
+    String path = '/',
+    String scheme = 'http',
+  }) {
     final base = Uri.parse(baseUrl);
     return Uri(
-      scheme: base.scheme.isEmpty ? 'http' : base.scheme,
+      scheme: scheme,
       host: base.host.isEmpty ? baseUrl : base.host,
       port: port,
       path: path,

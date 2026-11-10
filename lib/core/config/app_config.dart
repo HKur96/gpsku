@@ -25,8 +25,26 @@ class AppConfig {
     );
   }
 
-  /// Derives OsmAnd protocol ingestion URI from base URL host and port (default: 5055).
-  /// Defaults to plain 'http' scheme to avoid SSL handshake failures against Netty TrackerServer.
+  /// Whether the configured API base URL uses encrypted HTTPS transport.
+  bool get isHttps {
+    final uri = Uri.tryParse(baseUrl);
+    return uri?.scheme.toLowerCase() == 'https';
+  }
+
+  /// Derives Traccar WebServer's root proxy [Uri] (`POST /`) handled by
+  /// `WebServer.initClientProxy()` to forward OsmAnd payloads internally to port 5055.
+  Uri getOsmandProxyUri() {
+    final uri = Uri.parse(baseUrl);
+    return Uri(
+      scheme: uri.scheme.isNotEmpty ? uri.scheme : 'https',
+      host: uri.host.isNotEmpty ? uri.host : '10.0.2.2',
+      port: uri.hasPort ? uri.port : null,
+      path: '/',
+    );
+  }
+
+  /// Derives direct OsmAnd protocol ingestion URI from base URL host and port (default: 5055).
+  /// Targets plain 'http' Netty TrackerServer for direct local development endpoints.
   Uri getOsmandUri({int port = 5055, String scheme = 'http'}) {
     final uri = Uri.parse(baseUrl);
     return uri.replace(

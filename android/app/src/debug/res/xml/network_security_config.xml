@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Debug build override: allow LAN/local HTTP testing (e.g., Traccar OsmAnd port 5055 on LAN IP)
+         without weakening release builds in src/main/res/xml/network_security_config.xml -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+

@@ -51,6 +51,9 @@ class UserModel {
     this.attributes = const {},
   });
 
+  /// Canonical authorization rule for Developer Options & OsmAnd Telemetry Emulator.
+  bool get isDeveloperModeAllowed => administrator && !readonly && !disabled;
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] as int? ?? 0,

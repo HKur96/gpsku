@@ -60,7 +60,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Core configurations & persistent infrastructure
-  const appConfig = AppConfig();
+  const configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8082',
+  );
+  const appConfig = AppConfig(baseUrl: configuredBaseUrl);
   final cookieJar = SessionCookieJar();
   final secureStorage = SecureStorageService();
 
@@ -174,6 +178,7 @@ void main() async {
   );
   final telemetryEmulatorProvider = TelemetryEmulatorProvider(
     repository: telemetryEmulatorRepository,
+    authProvider: authProvider,
   );
   final eventStreamService = EventStreamService(
     webSocketService: webSocketService,

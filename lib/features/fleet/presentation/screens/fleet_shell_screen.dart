@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import 'package:gpsku/core/utils/app_logger.dart';
 import 'package:gpsku/features/auth/presentation/providers/auth_provider.dart';
 import 'package:gpsku/features/fleet/data/datasources/traccar_websocket_service.dart';
+import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/presentation/providers/live_fleet_provider.dart';
 import '../widgets/drawer/fleet_list_drawer.dart';
 import '../widgets/map/camera_calculation_helper.dart';
@@ -33,6 +35,7 @@ import 'package:gpsku/features/attributes/presentation/providers/computed_attrib
 import 'package:gpsku/features/attributes/presentation/widgets/computed_attributes_drawer.dart';
 import 'package:gpsku/features/emulator/presentation/providers/telemetry_emulator_provider.dart';
 import 'package:gpsku/features/emulator/presentation/widgets/telemetry_emulator_sheet.dart';
+import 'package:gpsku/features/settings/presentation/screens/app_settings_screen.dart';
 
 /// Bootstrap Fleet Shell screen to verify authentication, DI wiring,
 /// and live telematics socket state without production map or report widgets.
@@ -84,6 +87,150 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
         verticalOffsetPixels: VehicleDetailSheet.estimatedSheetHeight,
       );
     }
+  }
+
+  void _handleMapClick(
+    BuildContext context,
+    LatLng coordinates,
+    AuthProvider auth,
+    TelemetryEmulatorProvider? telemetryEmulator,
+  ) {
+    if (telemetryEmulator == null ||
+        !auth.canAccessDeveloperTools ||
+        !telemetryEmulator.isDeveloperAuthorized ||
+        !telemetryEmulator.isMapPickMode) {
+      return;
+    }
+
+    final accepted = telemetryEmulator.setMapPickedCoordinates(
+      coordinates.latitude,
+      coordinates.longitude,
+    );
+    if (!accepted && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            telemetryEmulator.lastErrorMessage ??
+                'Koordinat ketukan peta tidak valid.',
+          ),
+          backgroundColor: const Color(0xFFD97706),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openSettings(
+    BuildContext context,
+    AuthProvider auth,
+    TelemetryEmulatorProvider? telemetryEmulator,
+    DeviceModel? selectedDevice,
+  ) async {
+    final navigator = Navigator.of(context);
+    SettingsLaunchAction? action;
+    try {
+      action = await context.push<SettingsLaunchAction>('/settings');
+    } catch (_) {
+      action = await navigator.push<SettingsLaunchAction>(
+        MaterialPageRoute<SettingsLaunchAction>(
+          builder: (_) => const AppSettingsScreen(),
+        ),
+      );
+    }
+
+    if (!context.mounted || action == null) return;
+    if (!auth.canAccessDeveloperTools ||
+        telemetryEmulator == null ||
+        !telemetryEmulator.isDeveloperAuthorized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Akses ditolak: Mode Pengembang hanya untuk Administrator non-readonly.',
+          ),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    switch (action) {
+      case SettingsLaunchAction.openEmulatorSheet:
+        final initial = telemetryEmulator.targetUniqueId.isEmpty
+            ? selectedDevice
+            : null;
+        await TelemetryEmulatorSheet.show(context, initialDevice: initial);
+        break;
+      case SettingsLaunchAction.activateMapPick:
+        telemetryEmulator.setMapPickMode(true);
+        break;
+    }
+  }
+
+  Widget _buildMapPickHudPositioned(
+    BuildContext context,
+    AuthProvider auth,
+    TelemetryEmulatorProvider activeEmulator,
+    bool hasGeofences,
+  ) {
+    return Positioned(
+      top: 12,
+      left: 12,
+      right: hasGeofences ? 64 : 12,
+      child: _EmulatorMapPickHud(
+        provider: activeEmulator,
+        onDone: () => activeEmulator.setMapPickMode(false),
+        onOpenSheet: () => TelemetryEmulatorSheet.show(context),
+        onSendFix: () async {
+          if (!auth.canAccessDeveloperTools ||
+              !activeEmulator.isDeveloperAuthorized) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Akses ditolak: Administrator non-readonly diperlukan.',
+                ),
+                backgroundColor: Color(0xFFDC2626),
+              ),
+            );
+            return;
+          }
+          if (activeEmulator.targetUniqueId.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Pilih kendaraan target dahulu sebelum mengirim titik.',
+                ),
+                backgroundColor: const Color(0xFFD97706),
+                action: SnackBarAction(
+                  label: 'Pilih Unit',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    if (context.mounted) {
+                      TelemetryEmulatorSheet.show(context);
+                    }
+                  },
+                ),
+              ),
+            );
+            return;
+          }
+          final ok = await activeEmulator.sendSingleFix();
+          if (!context.mounted) return;
+          final diag = activeEmulator.lastTransportDiagnostics;
+          final msg = ok
+              ? (diag != null && diag.isFallbackProxy
+                    ? 'Posisi terkirim via Fallback Proxy :${diag.endpointUri.port} (HTTP 200 OK)'
+                    : 'Posisi berhasil dikirim ke server Traccar (HTTP 200 OK)')
+              : (activeEmulator.lastErrorMessage ?? 'Gagal mengirim posisi');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: ok
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -170,11 +317,19 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
     }
 
     final hasActiveSheet = selectedId != null;
+    final hasActiveMapPick =
+        auth.canAccessDeveloperTools &&
+        (telemetryEmulator?.isDeveloperAuthorized ?? false) &&
+        (telemetryEmulator?.isMapPickMode ?? false);
 
     return PopScope(
-      canPop: !hasActiveSheet,
+      canPop: !hasActiveSheet && !hasActiveMapPick,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        if (hasActiveMapPick) {
+          telemetryEmulator?.setMapPickMode(false);
+          return;
+        }
         if (hasActiveSheet) {
           fleet.selectDevice(null);
         }
@@ -235,18 +390,6 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   ComputedAttributesDrawer.show(context);
                 },
               ),
-            if (telemetryEmulator != null)
-              IconButton(
-                key: const Key('telemetry_emulator_action_button'),
-                icon: const Icon(Icons.sensors_outlined),
-                tooltip: 'Simulator Telemetri',
-                onPressed: () {
-                  TelemetryEmulatorSheet.show(
-                    context,
-                    initialDevice: selectedDevice,
-                  );
-                },
-              ),
             if (notifications != null)
               IconButton(
                 key: const Key('notifications_drawer_action_button'),
@@ -263,6 +406,17 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                   );
                 },
               ),
+            IconButton(
+              key: const Key('app_settings_action_button'),
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Pengaturan',
+              onPressed: () => _openSettings(
+                context,
+                auth,
+                telemetryEmulator,
+                selectedDevice,
+              ),
+            ),
             IconButton(
               key: const Key('fleet_app_bar_logout_button'),
               icon: const Icon(Icons.logout),
@@ -452,12 +606,15 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                                 color: Color(0xFF1E88E5),
                               ),
                               SizedBox(width: 8),
-                              Text(
-                                'MapLibre Verification Surface (OpenFreeMap Liberty)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Color(0xFF1565C0),
+                              Expanded(
+                                child: Text(
+                                  'MapLibre Verification Surface (OpenFreeMap Liberty)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Color(0xFF1565C0),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -469,6 +626,12 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                             children: [
                               FleetMapWidget(
                                 showAttribution: true,
+                                onMapClick: (_, coordinates) => _handleMapClick(
+                                  context,
+                                  coordinates,
+                                  auth,
+                                  telemetryEmulator,
+                                ),
                                 onMapReady: (controller, cameraController) {
                                   _cameraController = cameraController;
                                   AppLogger.info(
@@ -512,7 +675,14 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
                                     },
                                   ),
                                 ),
-                              if (selectedDevice != null)
+                              if (hasActiveMapPick && telemetryEmulator != null)
+                                _buildMapPickHudPositioned(
+                                  context,
+                                  auth,
+                                  telemetryEmulator,
+                                  geofences != null,
+                                ),
+                              if (selectedDevice != null && !hasActiveMapPick)
                                 Positioned(
                                   left: 0,
                                   right: 0,
@@ -704,6 +874,135 @@ class _StatColumn extends StatelessWidget {
         ),
         Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ],
+    );
+  }
+}
+
+class _EmulatorMapPickHud extends StatelessWidget {
+  final TelemetryEmulatorProvider provider;
+  final VoidCallback onDone;
+  final VoidCallback onOpenSheet;
+  final Future<void> Function() onSendFix;
+
+  const _EmulatorMapPickHud({
+    required this.provider,
+    required this.onDone,
+    required this.onOpenSheet,
+    required this.onSendFix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTarget = provider.targetUniqueId.isNotEmpty;
+
+    return Card(
+      key: const Key('emulator_map_pick_hud'),
+      elevation: 4,
+      color: Colors.white.withValues(alpha: 0.96),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFF1E88E5), width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.gps_fixed, size: 16, color: Color(0xFF1E88E5)),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Mode Pilih Koordinat Emulator',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(
+                  key: const Key('emulator_hud_done_button'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: onDone,
+                  child: const Text('Selesai', style: TextStyle(fontSize: 11)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              key: const Key('emulator_hud_coordinates_text'),
+              'Ketuk peta untuk mengisi koordinat • '
+              'Lat: ${provider.currentLat.toStringAsFixed(6)}, '
+              'Lon: ${provider.currentLon.toStringAsFixed(6)}',
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            if (hasTarget)
+              Text(
+                'Target: ${provider.targetDeviceName ?? provider.targetUniqueId} (${provider.targetUniqueId})',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF1565C0),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              )
+            else
+              const Text(
+                key: Key('emulator_hud_no_target_warning'),
+                'Pilih kendaraan target dahulu untuk mengirim titik',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFFD97706),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                FilledButton.icon(
+                  key: const Key('emulator_hud_send_fix_button'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: const Color(0xFF1E88E5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                  icon: const Icon(Icons.send, size: 14),
+                  label: Text(
+                    provider.isBusy ? 'Mengirim...' : 'Kirim Titik Ini',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: provider.isBusy ? null : onSendFix,
+                ),
+                OutlinedButton.icon(
+                  key: const Key('emulator_hud_open_sheet_button'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                  icon: const Icon(Icons.tune, size: 14),
+                  label: const Text(
+                    'Panel Lengkap',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onPressed: onOpenSheet,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

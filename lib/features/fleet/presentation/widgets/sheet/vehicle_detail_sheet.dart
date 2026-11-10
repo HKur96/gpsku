@@ -8,7 +8,6 @@ import 'package:gpsku/features/fleet/data/models/position_model.dart';
 import 'package:gpsku/features/maintenance/domain/helpers/maintenance_progress_helper.dart';
 import 'package:gpsku/features/maintenance/presentation/providers/maintenance_provider.dart';
 import 'package:gpsku/features/share/presentation/widgets/share_link_bottom_sheet.dart';
-import 'package:gpsku/features/emulator/presentation/widgets/telemetry_emulator_sheet.dart';
 
 /// Interactive telemetry bottom sheet displaying essential device and position metrics.
 ///
@@ -25,7 +24,6 @@ class VehicleDetailSheet extends StatelessWidget {
   final VoidCallback? onCommandsPressed;
   final VoidCallback? onHistoryPressed;
   final VoidCallback? onSharePressed;
-  final VoidCallback? onEmulatorPressed;
 
   const VehicleDetailSheet({
     super.key,
@@ -36,7 +34,6 @@ class VehicleDetailSheet extends StatelessWidget {
     this.onCommandsPressed,
     this.onHistoryPressed,
     this.onSharePressed,
-    this.onEmulatorPressed,
   });
 
   @override
@@ -227,18 +224,6 @@ class VehicleDetailSheet extends StatelessWidget {
               ),
             ],
           ),
-        ),
-
-        // Telemetry Emulator Launch Button (Feature F-39)
-        IconButton(
-          key: const Key('vehicle_sheet_emulator_button'),
-          icon: const Icon(Icons.sensors_outlined),
-          iconSize: 20,
-          color: isDark ? Colors.grey[400] : Colors.grey[600],
-          tooltip: 'Simulasi Telemetri',
-          onPressed:
-              onEmulatorPressed ??
-              () => TelemetryEmulatorSheet.show(context, initialDevice: device),
         ),
 
         // Dismiss / Close Button

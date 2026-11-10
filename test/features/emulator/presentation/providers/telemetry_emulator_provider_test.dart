@@ -3,16 +3,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:gpsku/core/errors/failures.dart';
+import 'package:gpsku/features/auth/data/models/user_model.dart';
+import 'package:gpsku/features/auth/domain/repositories/auth_repository.dart';
+import 'package:gpsku/features/auth/presentation/providers/auth_provider.dart';
 import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/data/models/position_model.dart';
+import 'package:gpsku/features/emulator/data/models/osmand_transport_diagnostics.dart';
 import 'package:gpsku/features/emulator/data/models/telemetry_packet_model.dart';
 import 'package:gpsku/features/emulator/domain/repositories/telemetry_emulator_repository.dart';
 import 'package:gpsku/features/emulator/presentation/providers/telemetry_emulator_provider.dart';
 
-class MockTelemetryEmulatorRepository implements TelemetryEmulatorRepository {
+class MockTelemetryEmulatorRepository
+    implements TelemetryEmulatorRepository, OsmandTransportDiagnosticsProvider {
   bool sendTelemetrySuccess = true;
   bool probePortSuccess = true;
   Failure? failureToReturn;
+  OsmandTransportDiagnostics? diagnosticsToReturn;
+
+  @override
+  OsmandTransportDiagnostics? get lastTransportDiagnostics =>
+      diagnosticsToReturn;
 
   TelemetryPacketModel? lastPacket;
   String? lastCustomHost;
@@ -54,6 +64,41 @@ class MockTelemetryEmulatorRepository implements TelemetryEmulatorRepository {
     }
     return Right(probePortSuccess);
   }
+}
+
+class _StubAuthRepository implements AuthRepository {
+  UserModel? userToReturn;
+
+  _StubAuthRepository(this.userToReturn);
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async =>
+      const Right(null);
+
+  @override
+  Future<Either<Failure, UserModel>> getCurrentSession() async {
+    if (userToReturn != null) return Right(userToReturn!);
+    return const Left(AuthFailure('Unauthenticated'));
+  }
+
+  @override
+  Future<Either<Failure, ({String? email, String? password, bool rememberMe})>>
+  getSavedCredentials() async =>
+      const Right((email: null, password: null, rememberMe: false));
+
+  @override
+  Future<Either<Failure, UserModel>> login({
+    required String email,
+    required String password,
+    String? code,
+    bool rememberMe = false,
+  }) async {
+    if (userToReturn != null) return Right(userToReturn!);
+    return const Left(AuthFailure('Invalid'));
+  }
+
+  @override
+  Future<Either<Failure, void>> logout() async => const Right(null);
 }
 
 void main() {
@@ -365,6 +410,171 @@ void main() {
           45.0,
         );
         expect(zeroMove, equals(start));
+      },
+    );
+
+    test(
+      'TC-TEP-14: setMapPickedCoordinates accepts valid WGS-84 coordinates including (0.0, 0.0) without auto-transmit',
+      () {
+        expect(provider.setMapPickMode(true), isTrue);
+        expect(provider.isMapPickMode, isTrue);
+
+        // Must accept (0.0, 0.0) and extreme valid WGS-84 boundaries
+        expect(provider.setMapPickedCoordinates(0.0, 0.0), isTrue);
+        expect(provider.currentLat, 0.0);
+        expect(provider.currentLon, 0.0);
+
+        expect(provider.setMapPickedCoordinates(-90.0, -180.0), isTrue);
+        expect(provider.currentLat, -90.0);
+        expect(provider.currentLon, -180.0);
+
+        expect(provider.setMapPickedCoordinates(90.0, 180.0), isTrue);
+        expect(provider.currentLat, 90.0);
+        expect(provider.currentLon, 180.0);
+
+        // Strictly zero automatic network calls
+        expect(mockRepo.sendTelemetryCallCount, 0);
+      },
+    );
+
+    test(
+      'TC-TEP-15: setMapPickedCoordinates rejects NaN, Infinity, and out-of-range coordinates safely',
+      () {
+        provider.updateCoordinates(lat: -6.2088, lon: 106.8456);
+
+        expect(provider.setMapPickedCoordinates(double.nan, 106.0), isFalse);
+        expect(
+          provider.setMapPickedCoordinates(-6.2, double.infinity),
+          isFalse,
+        );
+        expect(
+          provider.setMapPickedCoordinates(double.negativeInfinity, 106.0),
+          isFalse,
+        );
+        expect(provider.setMapPickedCoordinates(90.0001, 106.0), isFalse);
+        expect(provider.setMapPickedCoordinates(-90.0001, 106.0), isFalse);
+        expect(provider.setMapPickedCoordinates(-6.2, 180.0001), isFalse);
+        expect(provider.setMapPickedCoordinates(-6.2, -180.0001), isFalse);
+
+        // Previous coordinates unchanged and zero error side-effects on network
+        expect(provider.currentLat, -6.2088);
+        expect(provider.currentLon, 106.8456);
+        expect(provider.lastErrorMessage, isNotNull);
+        expect(mockRepo.sendTelemetryCallCount, 0);
+      },
+    );
+
+    test(
+      'TC-TEP-16: Fallback proxy :8082 distinguishes reachableViaFallback status and preserves direct error',
+      () async {
+        mockRepo.diagnosticsToReturn = OsmandTransportDiagnostics(
+          mode: OsmandTransportMode.httpWebProxyFallback,
+          endpointUri: Uri.parse('http://10.0.2.2:8082/'),
+          httpMethod: 'POST',
+          statusCode: 400,
+          initialDirectFailureReason: 'Connection refused on port 5055',
+          timestamp: DateTime.utc(2026, 11, 10),
+        );
+
+        final probed = await provider.probePort();
+        expect(probed, isTrue);
+        expect(provider.portStatus, OsmandPortStatus.reachableViaFallback);
+        expect(provider.isPortConnected, isTrue);
+        expect(
+          provider.lastTransportDiagnostics?.endpointUri.toString(),
+          'http://10.0.2.2:8082/',
+        );
+        expect(
+          provider.lastTransportDiagnostics?.initialDirectFailureReason,
+          contains('port 5055'),
+        );
+      },
+    );
+
+    test(
+      'TC-TEP-17: Authorization enforcement blocks non-admin, readonly, disabled, and unauthenticated users',
+      () async {
+        for (final unauthorizedUser in const [
+          null,
+          UserModel(
+            id: 2,
+            name: 'Normal',
+            email: 'u@x.id',
+            administrator: false,
+          ),
+          UserModel(
+            id: 3,
+            name: 'ReadOnlyAdmin',
+            email: 'ro@x.id',
+            administrator: true,
+            readonly: true,
+          ),
+          UserModel(
+            id: 4,
+            name: 'DisabledAdmin',
+            email: 'dis@x.id',
+            administrator: true,
+            disabled: true,
+          ),
+        ]) {
+          final authRepo = _StubAuthRepository(unauthorizedUser);
+          final auth = AuthProvider(authRepository: authRepo);
+          if (unauthorizedUser != null) {
+            await auth.checkInitialAuth();
+          }
+          final guardedProvider = TelemetryEmulatorProvider(
+            repository: mockRepo,
+            authProvider: auth,
+          );
+          guardedProvider.setTargetDevice(tDevice);
+
+          expect(guardedProvider.isDeveloperAuthorized, isFalse);
+          expect(guardedProvider.setMapPickMode(true), isFalse);
+          expect(guardedProvider.isMapPickMode, isFalse);
+          expect(guardedProvider.setMapPickedCoordinates(-6.9, 107.6), isFalse);
+          expect(await guardedProvider.probePort(), isFalse);
+          expect(await guardedProvider.sendSingleFix(), isFalse);
+          expect(guardedProvider.startSimulation(), isFalse);
+          expect(guardedProvider.isSimulating, isFalse);
+
+          guardedProvider.dispose();
+          auth.dispose();
+        }
+
+        expect(mockRepo.probePortCallCount, 0);
+        expect(mockRepo.sendTelemetryCallCount, 0);
+      },
+    );
+
+    test(
+      'TC-TEP-18: Auth logout or role downgrade clears map-pick state and stops timers automatically',
+      () async {
+        const admin = UserModel(
+          id: 1,
+          name: 'Admin',
+          email: 'a@x.id',
+          administrator: true,
+        );
+        final authRepo = _StubAuthRepository(admin);
+        final auth = AuthProvider(authRepository: authRepo);
+        await auth.checkInitialAuth();
+
+        final guardedProvider = TelemetryEmulatorProvider(
+          repository: mockRepo,
+          authProvider: auth,
+        );
+        guardedProvider.setTargetDevice(tDevice);
+        expect(guardedProvider.setMapPickMode(true), isTrue);
+        expect(guardedProvider.startSimulation(), isTrue);
+
+        await auth.logout();
+
+        expect(guardedProvider.isMapPickMode, isFalse);
+        expect(guardedProvider.isSimulating, isFalse);
+        expect(guardedProvider.targetUniqueId, isEmpty);
+
+        guardedProvider.dispose();
+        auth.dispose();
       },
     );
   });

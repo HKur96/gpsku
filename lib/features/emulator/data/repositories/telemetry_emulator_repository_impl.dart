@@ -4,14 +4,25 @@ import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/repositories/telemetry_emulator_repository.dart';
 import '../datasources/telemetry_emulator_remote_data_source.dart';
+import '../models/osmand_transport_diagnostics.dart';
 import '../models/telemetry_packet_model.dart';
 
 /// Production implementation of [TelemetryEmulatorRepository] mapping low-level
 /// datasource exceptions into typed domain [Failure] models.
-class TelemetryEmulatorRepositoryImpl implements TelemetryEmulatorRepository {
+class TelemetryEmulatorRepositoryImpl
+    implements TelemetryEmulatorRepository, OsmandTransportDiagnosticsProvider {
   final TelemetryEmulatorRemoteDataSource remoteDataSource;
 
   TelemetryEmulatorRepositoryImpl({required this.remoteDataSource});
+
+  @override
+  OsmandTransportDiagnostics? get lastTransportDiagnostics {
+    if (remoteDataSource
+        case final OsmandTransportDiagnosticsProvider diagProvider) {
+      return diagProvider.lastTransportDiagnostics;
+    }
+    return null;
+  }
 
   @override
   Future<Either<Failure, bool>> sendTelemetry({

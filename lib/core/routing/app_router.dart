@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/emulator/presentation/widgets/telemetry_emulator_sheet.dart';
 import '../../features/fleet/presentation/screens/fleet_shell_screen.dart';
 import '../../features/notifications/presentation/screens/notification_settings_screen.dart';
 import '../../features/reports/presentation/screens/route_history_screen.dart';
+import '../../features/settings/presentation/screens/app_settings_screen.dart';
 
 /// Application router configuration using GoRouter with declarative auth redirection.
 class AppRouter {
   final AuthProvider authProvider;
+
+  static const Set<String> _developerRoutes = {
+    '/emulator',
+    '/settings/developer',
+    '/settings/emulator',
+  };
 
   AppRouter({required this.authProvider});
 
@@ -32,6 +40,11 @@ class AppRouter {
 
       if (isAuthenticated && isLoggingIn) {
         return '/';
+      }
+
+      if (_developerRoutes.contains(state.matchedLocation) &&
+          !authProvider.canAccessDeveloperTools) {
+        return '/settings';
       }
 
       return null;
@@ -61,6 +74,30 @@ class AppRouter {
         path: '/notification-settings',
         name: 'notification-settings',
         builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const AppSettingsScreen(),
+        routes: [
+          GoRoute(
+            path: 'developer',
+            name: 'settings-developer',
+            builder: (context, state) => const AppSettingsScreen(),
+          ),
+          GoRoute(
+            path: 'emulator',
+            name: 'settings-emulator',
+            builder: (context, state) =>
+                const TelemetryEmulatorSheet(isFullScreen: true),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/emulator',
+        name: 'emulator',
+        builder: (context, state) =>
+            const TelemetryEmulatorSheet(isFullScreen: true),
       ),
     ],
   );

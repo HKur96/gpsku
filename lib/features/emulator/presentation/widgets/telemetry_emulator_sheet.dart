@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../fleet/data/models/device_model.dart';
 import '../../../fleet/presentation/providers/live_fleet_provider.dart';
 import '../providers/telemetry_emulator_provider.dart';
@@ -8,10 +10,16 @@ import '../providers/telemetry_emulator_provider.dart';
 /// manual coordinate controls, sliders, and path simulation engine controls.
 class TelemetryEmulatorSheet extends StatefulWidget {
   final DeviceModel? initialDevice;
+  final bool isFullScreen;
 
-  const TelemetryEmulatorSheet({super.key, this.initialDevice});
+  const TelemetryEmulatorSheet({
+    super.key,
+    this.initialDevice,
+    this.isFullScreen = false,
+  });
 
   /// Displays the [TelemetryEmulatorSheet] as a responsive modal bottom sheet.
+  /// Enforces Administrator (non-readonly) authorization before opening.
   static Future<void> show(
     BuildContext context, {
     DeviceModel? initialDevice,
@@ -20,6 +28,29 @@ class TelemetryEmulatorSheet extends StatefulWidget {
       context,
       listen: false,
     );
+
+    AuthProvider? auth;
+    try {
+      auth = Provider.of<AuthProvider>(context, listen: false);
+    } on ProviderNotFoundException {
+      auth = null;
+    }
+
+    final isAllowed =
+        (auth == null || auth.canAccessDeveloperTools) &&
+        provider.isDeveloperAuthorized;
+    if (!isAllowed) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Akses ditolak: Simulator Telemetri hanya untuk Administrator aktif (non-readonly).',
+          ),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
 
     if (initialDevice != null) {
       LiveFleetProvider? liveFleet;
@@ -108,6 +139,41 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     final isDark = theme.brightness == Brightness.dark;
     final provider = context.watch<TelemetryEmulatorProvider>();
 
+    AuthProvider? auth;
+    try {
+      auth = context.watch<AuthProvider>();
+    } on ProviderNotFoundException {
+      auth = null;
+    }
+
+    final isAllowed =
+        (auth == null || auth.canAccessDeveloperTools) &&
+        provider.isDeveloperAuthorized;
+    if (!isAllowed) {
+      return Scaffold(
+        key: const Key('emulator_sheet_access_denied'),
+        appBar: AppBar(
+          title: const Text('Akses Ditolak'),
+          actions: [
+            IconButton(
+              key: const Key('emulator_sheet_close_button'),
+              icon: const Icon(Icons.close),
+              onPressed: () => _closeSheet(context),
+            ),
+          ],
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Text(
+              'Simulator Telemetri hanya dapat diakses oleh Administrator aktif (non-readonly).',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
     // Keep text controllers synchronized during continuous simulations
     _syncControllers(provider.currentLat, provider.currentLon);
 
@@ -118,70 +184,96 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     final devices = liveFleet?.devices.values.toList() ?? <DeviceModel>[];
 
     return FractionallySizedBox(
-      heightFactor: 0.90,
+      heightFactor: widget.isFullScreen ? 1.0 : 0.90,
       child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        child: Scaffold(
-          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          appBar: AppBar(
-            elevation: 1,
-            backgroundColor: isDark
-                ? const Color(0xFF1E293B)
-                : const Color(0xFFF8FAFC),
-            foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
-            title: Row(
-              children: [
-                const Icon(Icons.sensors, color: Color(0xFF1E88E5), size: 22),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Simulator Telemetri (Port 5055)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
+        borderRadius: widget.isFullScreen
+            ? BorderRadius.zero
+            : const BorderRadius.vertical(top: Radius.circular(20)),
+        child: ScaffoldMessenger(
+          child: Builder(
+            builder: (sheetContext) => Scaffold(
+              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+              appBar: AppBar(
+                elevation: 1,
+                backgroundColor: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF8FAFC),
+                foregroundColor: isDark
+                    ? Colors.white
+                    : const Color(0xFF0F172A),
+                title: Row(
+                  children: [
+                    const Icon(
+                      Icons.sensors,
+                      color: Color(0xFF1E88E5),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Simulator Telemetri (Port 5055)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  _buildPortProbeBadge(provider, isDark),
+                  IconButton(
+                    key: const Key('emulator_sheet_close_button'),
+                    icon: const Icon(Icons.close),
+                    onPressed: () => _closeSheet(context),
                   ),
-                ),
-              ],
-            ),
-            actions: [
-              _buildPortProbeBadge(provider, isDark),
-              IconButton(
-                key: const Key('emulator_sheet_close_button'),
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
+                ],
               ),
-            ],
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Target Fleet Selection Section
-                _buildTargetDeviceSection(
-                  context,
-                  provider,
-                  devices,
-                  liveFleet,
-                  isDark,
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (provider.lastTransportDiagnostics != null ||
+                        provider.lastErrorMessage != null) ...[
+                      _buildTransportDiagnosticsBanner(provider, isDark),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // 1. Target Fleet Selection Section
+                    _buildTargetDeviceSection(
+                      context,
+                      provider,
+                      devices,
+                      liveFleet,
+                      isDark,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 2. Coordinate Inputs Section
+                    _buildCoordinatesSection(
+                      context,
+                      provider,
+                      liveFleet,
+                      isDark,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 3. Telemetry Controls (Speed, Bearing, Battery, Ignition)
+                    _buildTelemetryControls(provider, isDark),
+                    const SizedBox(height: 20),
+
+                    // 4. Single Fix Action
+                    _buildSingleFixButton(sheetContext, provider),
+                    const SizedBox(height: 24),
+
+                    // 5. Path Simulation Controls Section
+                    _buildSimulationSection(provider, isDark),
+                    const SizedBox(height: 20),
+                  ],
                 ),
-                const SizedBox(height: 16),
-
-                // 2. Coordinate Inputs Section
-                _buildCoordinatesSection(provider, liveFleet, isDark),
-                const SizedBox(height: 16),
-
-                // 3. Telemetry Controls (Speed, Bearing, Battery, Ignition)
-                _buildTelemetryControls(provider, isDark),
-                const SizedBox(height: 20),
-
-                // 4. Single Fix Action
-                _buildSingleFixButton(provider),
-                const SizedBox(height: 24),
-
-                // 5. Path Simulation Controls Section
-                _buildSimulationSection(provider, isDark),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
           ),
         ),
@@ -189,7 +281,99 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     );
   }
 
+  void _closeSheet(BuildContext context) {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      try {
+        context.go('/settings');
+      } catch (_) {}
+    }
+  }
+
+  Widget _buildTransportDiagnosticsBanner(
+    TelemetryEmulatorProvider provider,
+    bool isDark,
+  ) {
+    final diag = provider.lastTransportDiagnostics;
+    final isFallback = diag?.isFallbackProxy ?? false;
+    final isError =
+        provider.portStatus == OsmandPortStatus.unreachable ||
+        (!provider.isPortConnected && provider.lastErrorMessage != null);
+
+    final Color toneColor;
+    final IconData toneIcon;
+    if (isError && provider.lastErrorMessage != null) {
+      toneColor = const Color(0xFFDC2626);
+      toneIcon = Icons.warning_amber_rounded;
+    } else if (isFallback) {
+      toneColor = const Color(0xFFD97706);
+      toneIcon = Icons.alt_route;
+    } else {
+      toneColor = const Color(0xFF0284C7);
+      toneIcon = Icons.info_outline;
+    }
+
+    return Container(
+      key: const Key('emulator_transport_diagnostics_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: toneColor.withValues(alpha: isDark ? 0.16 : 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: toneColor.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (diag != null) ...[
+            Row(
+              children: [
+                Icon(toneIcon, size: 15, color: toneColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    diag.modeLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: toneColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'Endpoint: ${diag.httpMethod} ${diag.endpointUri}'
+              '${diag.statusCode != null ? ' (HTTP ${diag.statusCode})' : ''}',
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+            ),
+            if (diag.initialDirectFailureReason != null) ...[
+              const SizedBox(height: 3),
+              Text(
+                'Direct port error (tercatat): ${diag.initialDirectFailureReason}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.amber.shade200 : Colors.brown.shade700,
+                ),
+              ),
+            ],
+          ],
+          if (provider.lastErrorMessage != null) ...[
+            if (diag != null) const SizedBox(height: 3),
+            Text(
+              provider.lastErrorMessage!,
+              style: TextStyle(fontSize: 11, color: isError ? toneColor : null),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildPortProbeBadge(TelemetryEmulatorProvider provider, bool isDark) {
+    final diag = provider.lastTransportDiagnostics;
     Color badgeColor;
     String badgeText;
     IconData badgeIcon;
@@ -197,8 +381,16 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     switch (provider.portStatus) {
       case OsmandPortStatus.reachable:
         badgeColor = const Color(0xFF16A34A);
-        badgeText = 'Port 5055 Aktif';
+        badgeText = diag?.isHttpsProxy == true
+            ? 'Proxy HTTPS Aktif'
+            : 'Port 5055 Aktif';
         badgeIcon = Icons.check_circle;
+        break;
+      case OsmandPortStatus.reachableViaFallback:
+        badgeColor = const Color(0xFFD97706);
+        badgeText =
+            'Fallback :${diag?.endpointUri.hasPort == true ? diag!.endpointUri.port : 8082} Aktif';
+        badgeIcon = Icons.alt_route;
         break;
       case OsmandPortStatus.unreachable:
         badgeColor = const Color(0xFFDC2626);
@@ -276,7 +468,8 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             key: const Key('emulator_device_dropdown'),
-            initialValue: provider.targetUniqueId.isNotEmpty
+            initialValue:
+                devices.any((d) => d.uniqueId == provider.targetUniqueId)
                 ? provider.targetUniqueId
                 : null,
             isExpanded: true,
@@ -373,6 +566,7 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
   }
 
   Widget _buildCoordinatesSection(
+    BuildContext context,
     TelemetryEmulatorProvider provider,
     LiveFleetProvider? liveFleet,
     bool isDark,
@@ -389,16 +583,48 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.pin_drop, color: Color(0xFF1E88E5), size: 18),
-              const SizedBox(width: 6),
-              const Expanded(
+              Icon(Icons.pin_drop, color: Color(0xFF1E88E5), size: 18),
+              SizedBox(width: 6),
+              Expanded(
                 child: Text(
                   'Koordinat Posisi GPS',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('emulator_pick_on_map_button'),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                ),
+                icon: const Icon(Icons.touch_app_outlined, size: 14),
+                label: const Text(
+                  'Pilih di Peta',
+                  style: TextStyle(fontSize: 11),
+                ),
+                onPressed: () {
+                  if (!provider.setMapPickMode(true)) return;
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop(true);
+                  } else {
+                    try {
+                      context.go('/');
+                    } catch (_) {}
+                  }
+                },
               ),
               TextButton(
                 key: const Key('emulator_reset_coordinates_button'),
@@ -515,7 +741,7 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
           ),
           Slider(
             key: const Key('emulator_speed_slider'),
-            value: provider.currentSpeed,
+            value: provider.currentSpeed.clamp(0.0, 160.0),
             min: 0.0,
             max: 160.0,
             divisions: 32,
@@ -544,7 +770,7 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
           ),
           Slider(
             key: const Key('emulator_bearing_slider'),
-            value: provider.currentBearing,
+            value: provider.currentBearing.clamp(0.0, 360.0),
             min: 0.0,
             max: 360.0,
             divisions: 72,
@@ -578,7 +804,7 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
           ),
           Slider(
             key: const Key('emulator_battery_slider'),
-            value: provider.currentBattery,
+            value: provider.currentBattery.clamp(0.0, 100.0),
             min: 0.0,
             max: 100.0,
             divisions: 20,
@@ -628,7 +854,10 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     );
   }
 
-  Widget _buildSingleFixButton(TelemetryEmulatorProvider provider) {
+  Widget _buildSingleFixButton(
+    BuildContext sheetContext,
+    TelemetryEmulatorProvider provider,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 48,
@@ -659,12 +888,13 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
         onPressed: provider.isBusy
             ? null
             : () async {
+                final messenger = ScaffoldMessenger.of(sheetContext);
                 final ok = await provider.sendSingleFix();
                 if (!mounted) return;
                 final msg = ok
                     ? 'Posisi berhasil dikirim ke server Traccar (HTTP 200 OK)'
                     : (provider.lastErrorMessage ?? 'Gagal mengirim posisi');
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(msg),
                     backgroundColor: ok

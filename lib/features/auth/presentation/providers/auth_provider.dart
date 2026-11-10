@@ -32,6 +32,10 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated =>
       _status == AuthStatus.authenticated && _currentUser != null;
 
+  /// Canonical developer/emulator access check reusing active session & [UserModel] role flags.
+  bool get canAccessDeveloperTools =>
+      isAuthenticated && (_currentUser?.isDeveloperModeAllowed ?? false);
+
   /// Validates session on startup or restores saved email/credentials.
   Future<void> checkInitialAuth() async {
     _status = AuthStatus.authenticating;

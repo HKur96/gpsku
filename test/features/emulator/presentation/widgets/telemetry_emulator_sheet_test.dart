@@ -7,19 +7,64 @@ import 'package:provider/provider.dart';
 import 'package:gpsku/core/config/app_config.dart';
 import 'package:gpsku/core/network/session_cookie_jar.dart';
 import 'package:gpsku/core/errors/failures.dart';
+import 'package:gpsku/features/auth/data/models/user_model.dart';
+import 'package:gpsku/features/auth/domain/repositories/auth_repository.dart';
+import 'package:gpsku/features/auth/presentation/providers/auth_provider.dart';
 import 'package:gpsku/features/fleet/data/datasources/traccar_websocket_service.dart';
 import 'package:gpsku/features/fleet/data/models/device_model.dart';
 import 'package:gpsku/features/fleet/data/models/position_model.dart';
 import 'package:gpsku/features/fleet/presentation/providers/live_fleet_provider.dart';
+import 'package:gpsku/features/emulator/data/models/osmand_transport_diagnostics.dart';
 import 'package:gpsku/features/emulator/data/models/telemetry_packet_model.dart';
 import 'package:gpsku/features/emulator/domain/repositories/telemetry_emulator_repository.dart';
 import 'package:gpsku/features/emulator/presentation/providers/telemetry_emulator_provider.dart';
 import 'package:gpsku/features/emulator/presentation/widgets/telemetry_emulator_sheet.dart';
 
-class MockTelemetryEmulatorRepo implements TelemetryEmulatorRepository {
+class _SheetMockAuthRepository implements AuthRepository {
+  UserModel? userToReturn;
+
+  _SheetMockAuthRepository(this.userToReturn);
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async =>
+      const Right(null);
+
+  @override
+  Future<Either<Failure, UserModel>> getCurrentSession() async {
+    if (userToReturn != null) return Right(userToReturn!);
+    return const Left(AuthFailure('Unauthenticated'));
+  }
+
+  @override
+  Future<Either<Failure, ({String? email, String? password, bool rememberMe})>>
+  getSavedCredentials() async =>
+      const Right((email: null, password: null, rememberMe: false));
+
+  @override
+  Future<Either<Failure, UserModel>> login({
+    required String email,
+    required String password,
+    String? code,
+    bool rememberMe = false,
+  }) async {
+    if (userToReturn != null) return Right(userToReturn!);
+    return const Left(AuthFailure('Invalid'));
+  }
+
+  @override
+  Future<Either<Failure, void>> logout() async => const Right(null);
+}
+
+class MockTelemetryEmulatorRepo
+    implements TelemetryEmulatorRepository, OsmandTransportDiagnosticsProvider {
   bool sendTelemetrySuccess = true;
   bool probePortSuccess = true;
   Failure? failureToReturn;
+  OsmandTransportDiagnostics? diagnosticsToReturn;
+
+  @override
+  OsmandTransportDiagnostics? get lastTransportDiagnostics =>
+      diagnosticsToReturn;
 
   int sendCount = 0;
   int probeCount = 0;
@@ -406,6 +451,162 @@ void main() {
 
         expect(find.byType(TelemetryEmulatorSheet), findsOneWidget);
         expect(find.text('Simulator Telemetri (Port 5055)'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'TC-TES-11: Renders Fallback :8082 badge and preserved direct error instead of masking as Port 5055 Aktif',
+      (tester) async {
+        mockRepo.diagnosticsToReturn = OsmandTransportDiagnostics(
+          mode: OsmandTransportMode.httpWebProxyFallback,
+          endpointUri: Uri.parse('http://10.0.2.2:8082/'),
+          httpMethod: 'POST',
+          statusCode: 400,
+          initialDirectFailureReason: 'Connection refused on port 5055',
+          timestamp: DateTime.utc(2026, 11, 10),
+        );
+
+        await tester.pumpWidget(buildTestWidget(initialDevice: tDevice1));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Port 5055 Aktif'), findsNothing);
+        expect(find.text('Fallback :8082 Aktif'), findsOneWidget);
+        expect(
+          find.byKey(const Key('emulator_transport_diagnostics_card')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('http://10.0.2.2:8082/'), findsOneWidget);
+        expect(
+          find.textContaining('Connection refused on port 5055'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'TC-TES-12: Clicking Pilih di Peta enables isMapPickMode and closes bottom sheet',
+      (tester) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: emulatorProvider,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        final pickBtn = find.byKey(const Key('emulator_pick_on_map_button'));
+        expect(pickBtn, findsOneWidget);
+        await tester.ensureVisible(pickBtn);
+        await tester.tap(pickBtn);
+        await tester.pumpAndSettle();
+
+        expect(emulatorProvider.isMapPickMode, isTrue);
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'TC-TES-13: TelemetryEmulatorSheet.show and widget render deny non-admin and readonly users',
+      (tester) async {
+        final roAuth = AuthProvider(
+          authRepository: _SheetMockAuthRepository(
+            const UserModel(
+              id: 2,
+              name: 'ReadOnlyAdmin',
+              email: 'ro@gpsku.id',
+              administrator: true,
+              readonly: true,
+            ),
+          ),
+        );
+        await roAuth.checkInitialAuth();
+
+        final guardedEmulator = TelemetryEmulatorProvider(
+          repository: mockRepo,
+          authProvider: roAuth,
+        );
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AuthProvider>.value(value: roAuth),
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: guardedEmulator,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        // Modal sheet must NOT open for readonly user
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+        expect(find.textContaining('Akses ditolak'), findsOneWidget);
+
+        // Even if directly mounted, widget renders Access Denied card with 0 send buttons
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AuthProvider>.value(value: roAuth),
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: guardedEmulator,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: const MaterialApp(
+              home: TelemetryEmulatorSheet(isFullScreen: true),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('emulator_sheet_access_denied')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('emulator_send_single_fix_button')),
+          findsNothing,
+        );
+
+        guardedEmulator.dispose();
+        roAuth.dispose();
       },
     );
   });
