@@ -6,6 +6,7 @@ import 'package:gpsku/core/utils/app_logger.dart';
 import 'package:gpsku/features/auth/presentation/providers/auth_provider.dart';
 import 'package:gpsku/features/fleet/data/datasources/traccar_websocket_service.dart';
 import 'package:gpsku/features/fleet/data/models/device_model.dart';
+import 'package:gpsku/features/fleet/presentation/coordinators/initial_fleet_sync_coordinator.dart';
 import 'package:gpsku/features/fleet/presentation/providers/live_fleet_provider.dart';
 import '../widgets/drawer/fleet_list_drawer.dart';
 import '../widgets/map/camera_calculation_helper.dart';
@@ -50,27 +51,106 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
   final FleetMarkerManager _markerManager = FleetMarkerManager();
   final GeofenceMapRenderer _geofenceRenderer = GeofenceMapRenderer();
   FleetCameraController? _cameraController;
+  AuthProvider? _authProvider;
+  bool _hasInitiatedShellSync = false;
+  bool _lastKnownAuthenticated = false;
+  bool _isSyncPostFrameScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _markerManager.onMarkerTapped = _onMarkerTapped;
-    // Connect WebSocket and fetch geofences when entering authenticated shell
+    // Defer initial fleet sync / fallback connection until auth and dependencies are ready
+    _scheduleShellInitCheck();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    AuthProvider? auth;
+    try {
+      auth = context.read<AuthProvider>();
+    } on ProviderNotFoundException {
+      auth = null;
+    }
+    if (!identical(_authProvider, auth)) {
+      _authProvider?.removeListener(_onAuthChanged);
+      _authProvider = auth;
+      _authProvider?.addListener(_onAuthChanged);
+    }
+    final isAuthenticated = auth?.isAuthenticated ?? false;
+    if (isAuthenticated &&
+        !_lastKnownAuthenticated &&
+        !_hasInitiatedShellSync) {
+      _scheduleShellInitCheck();
+    }
+    _lastKnownAuthenticated = isAuthenticated;
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    final isAuthenticated = _authProvider?.isAuthenticated ?? false;
+    if (!isAuthenticated) {
+      _hasInitiatedShellSync = false;
+      _lastKnownAuthenticated = false;
+      return;
+    }
+    if (!_lastKnownAuthenticated && !_hasInitiatedShellSync) {
+      _lastKnownAuthenticated = true;
+      _scheduleShellInitCheck();
+    }
+  }
+
+  void _scheduleShellInitCheck() {
+    if (_isSyncPostFrameScheduled) return;
+    _isSyncPostFrameScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isSyncPostFrameScheduled = false;
       if (!mounted) return;
-      try {
-        final ws = context.read<TraccarWebSocketService>();
-        ws.connect();
-      } on ProviderNotFoundException {
-        // Ignored when running with partial test harness
-      }
-      try {
-        final geofencesProvider = context.read<GeofencesProvider>();
-        geofencesProvider.fetchGeofences();
-      } on ProviderNotFoundException {
-        // Ignored when running with partial test harness
-      }
+      _initializeShellOrFallback();
     });
+  }
+
+  void _initializeShellOrFallback() {
+    if (_hasInitiatedShellSync) return;
+
+    InitialFleetSyncCoordinator? syncCoordinator;
+    try {
+      syncCoordinator = context.read<InitialFleetSyncCoordinator>();
+    } on ProviderNotFoundException {
+      syncCoordinator = null;
+    }
+
+    GeofencesProvider? geofencesProvider;
+    try {
+      geofencesProvider = context.read<GeofencesProvider>();
+    } on ProviderNotFoundException {
+      geofencesProvider = null;
+    }
+
+    if (syncCoordinator != null) {
+      final isAuthenticated = _authProvider?.isAuthenticated ?? false;
+      if (!isAuthenticated) {
+        // Wait until authentication succeeds before synchronizing fleet or opening WebSocket.
+        return;
+      }
+      _hasInitiatedShellSync = true;
+      if (!syncCoordinator.isLoading && !syncCoordinator.isReady) {
+        syncCoordinator.synchronizeFleet();
+      }
+      geofencesProvider?.fetchGeofences();
+      return;
+    }
+
+    // Fallback only when InitialFleetSyncCoordinator is not provided (partial test harness)
+    _hasInitiatedShellSync = true;
+    try {
+      final ws = context.read<TraccarWebSocketService>();
+      ws.connect();
+    } on ProviderNotFoundException {
+      // Ignored when running with partial test harness
+    }
+    geofencesProvider?.fetchGeofences();
   }
 
   void _onMarkerTapped(int deviceId) {
@@ -235,6 +315,8 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
 
   @override
   void dispose() {
+    _authProvider?.removeListener(_onAuthChanged);
+    _authProvider = null;
     _markerManager.dispose();
     _geofenceRenderer.dispose();
     super.dispose();
@@ -422,6 +504,13 @@ class _FleetShellScreenState extends State<FleetShellScreen> {
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
               onPressed: () async {
+                _hasInitiatedShellSync = false;
+                _lastKnownAuthenticated = false;
+                try {
+                  context.read<InitialFleetSyncCoordinator>().reset();
+                } on ProviderNotFoundException {
+                  // Ignored in partial test harness
+                }
                 final ws = context.read<TraccarWebSocketService>();
                 ws.disconnect();
                 fleet.clearFleet();

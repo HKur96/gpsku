@@ -61,7 +61,7 @@ class TelemetryEmulatorSheet extends StatefulWidget {
       provider.setTargetDevice(initialDevice, lastPos);
     }
 
-    await showModalBottomSheet<void>(
+    final closedForMapPick = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -71,6 +71,10 @@ class TelemetryEmulatorSheet extends StatefulWidget {
         child: TelemetryEmulatorSheet(initialDevice: initialDevice),
       ),
     );
+    if (closedForMapPick != true &&
+        (provider.isSimulating || provider.isPaused)) {
+      provider.stopSimulation();
+    }
   }
 
   @override
@@ -80,6 +84,14 @@ class TelemetryEmulatorSheet extends StatefulWidget {
 class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
   late final TextEditingController _latController;
   late final TextEditingController _lonController;
+  bool _navigatingToMapPick = false;
+
+  void _stopSimulationOnClose(TelemetryEmulatorProvider provider) {
+    if (_navigatingToMapPick) return;
+    if (provider.isSimulating || provider.isPaused) {
+      provider.stopSimulation();
+    }
+  }
 
   @override
   void initState() {
@@ -183,95 +195,105 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
     } catch (_) {}
     final devices = liveFleet?.devices.values.toList() ?? <DeviceModel>[];
 
-    return FractionallySizedBox(
-      heightFactor: widget.isFullScreen ? 1.0 : 0.90,
-      child: ClipRRect(
-        borderRadius: widget.isFullScreen
-            ? BorderRadius.zero
-            : const BorderRadius.vertical(top: Radius.circular(20)),
-        child: ScaffoldMessenger(
-          child: Builder(
-            builder: (sheetContext) => Scaffold(
-              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-              appBar: AppBar(
-                elevation: 1,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) return;
+        if (result == true || _navigatingToMapPick) return;
+        _stopSimulationOnClose(provider);
+      },
+      child: FractionallySizedBox(
+        heightFactor: widget.isFullScreen ? 1.0 : 0.90,
+        child: ClipRRect(
+          borderRadius: widget.isFullScreen
+              ? BorderRadius.zero
+              : const BorderRadius.vertical(top: Radius.circular(20)),
+          child: ScaffoldMessenger(
+            child: Builder(
+              builder: (sheetContext) => Scaffold(
                 backgroundColor: isDark
-                    ? const Color(0xFF1E293B)
-                    : const Color(0xFFF8FAFC),
-                foregroundColor: isDark
-                    ? Colors.white
-                    : const Color(0xFF0F172A),
-                title: Row(
-                  children: [
-                    const Icon(
-                      Icons.sensors,
-                      color: Color(0xFF1E88E5),
-                      size: 22,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Simulator Telemetri (Port 5055)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    ? const Color(0xFF0F172A)
+                    : Colors.white,
+                appBar: AppBar(
+                  elevation: 1,
+                  backgroundColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
+                  foregroundColor: isDark
+                      ? Colors.white
+                      : const Color(0xFF0F172A),
+                  title: Row(
+                    children: [
+                      const Icon(
+                        Icons.sensors,
+                        color: Color(0xFF1E88E5),
+                        size: 22,
                       ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Simulator Telemetri (Port 5055)',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    _buildPortProbeBadge(provider, isDark),
+                    IconButton(
+                      key: const Key('emulator_sheet_close_button'),
+                      icon: const Icon(Icons.close),
+                      onPressed: () => _closeSheet(context),
                     ),
                   ],
                 ),
-                actions: [
-                  _buildPortProbeBadge(provider, isDark),
-                  IconButton(
-                    key: const Key('emulator_sheet_close_button'),
-                    icon: const Icon(Icons.close),
-                    onPressed: () => _closeSheet(context),
-                  ),
-                ],
-              ),
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (provider.lastTransportDiagnostics != null ||
-                        provider.lastErrorMessage != null) ...[
-                      _buildTransportDiagnosticsBanner(provider, isDark),
-                      const SizedBox(height: 12),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (provider.lastTransportDiagnostics != null ||
+                          provider.lastErrorMessage != null) ...[
+                        _buildTransportDiagnosticsBanner(provider, isDark),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // 1. Target Fleet Selection Section
+                      _buildTargetDeviceSection(
+                        context,
+                        provider,
+                        devices,
+                        liveFleet,
+                        isDark,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 2. Coordinate Inputs Section
+                      _buildCoordinatesSection(
+                        context,
+                        provider,
+                        liveFleet,
+                        isDark,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3. Telemetry Controls (Speed, Bearing, Battery, Ignition)
+                      _buildTelemetryControls(provider, isDark),
+                      const SizedBox(height: 20),
+
+                      // 4. Single Fix Action
+                      _buildSingleFixButton(sheetContext, provider),
+                      const SizedBox(height: 24),
+
+                      // 5. Path Simulation Controls Section
+                      _buildSimulationSection(provider, isDark),
+                      const SizedBox(height: 20),
                     ],
-
-                    // 1. Target Fleet Selection Section
-                    _buildTargetDeviceSection(
-                      context,
-                      provider,
-                      devices,
-                      liveFleet,
-                      isDark,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 2. Coordinate Inputs Section
-                    _buildCoordinatesSection(
-                      context,
-                      provider,
-                      liveFleet,
-                      isDark,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 3. Telemetry Controls (Speed, Bearing, Battery, Ignition)
-                    _buildTelemetryControls(provider, isDark),
-                    const SizedBox(height: 20),
-
-                    // 4. Single Fix Action
-                    _buildSingleFixButton(sheetContext, provider),
-                    const SizedBox(height: 24),
-
-                    // 5. Path Simulation Controls Section
-                    _buildSimulationSection(provider, isDark),
-                    const SizedBox(height: 20),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -282,8 +304,9 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
   }
 
   void _closeSheet(BuildContext context) {
+    _stopSimulationOnClose(context.read<TelemetryEmulatorProvider>());
     if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(false);
     } else {
       try {
         context.go('/settings');
@@ -616,7 +639,11 @@ class _TelemetryEmulatorSheetState extends State<TelemetryEmulatorSheet> {
                   style: TextStyle(fontSize: 11),
                 ),
                 onPressed: () {
-                  if (!provider.setMapPickMode(true)) return;
+                  _navigatingToMapPick = true;
+                  if (!provider.setMapPickMode(true)) {
+                    _navigatingToMapPick = false;
+                    return;
+                  }
                   if (Navigator.of(context).canPop()) {
                     Navigator.of(context).pop(true);
                   } else {

@@ -609,5 +609,236 @@ void main() {
         roAuth.dispose();
       },
     );
+
+    testWidgets(
+      'TC-TES-14: AUD-02: Closing modal via X button stops active simulation and timer',
+      (tester) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: emulatorProvider,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        emulatorProvider.setSimulationInterval(const Duration(seconds: 1));
+        emulatorProvider.startSimulation();
+        await tester.pump();
+        expect(emulatorProvider.isSimulating, isTrue);
+        final countBeforeClose = mockRepo.sendCount;
+
+        await tester.tap(find.byKey(const Key('emulator_sheet_close_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+        expect(emulatorProvider.isSimulating, isFalse);
+        expect(
+          emulatorProvider.simulationStatus,
+          equals(EmulatorSimulationStatus.idle),
+        );
+
+        // Advance time well past simulation interval -> zero further packets sent
+        await tester.pump(const Duration(seconds: 3));
+        expect(mockRepo.sendCount, equals(countBeforeClose));
+      },
+    );
+
+    testWidgets(
+      'TC-TES-15: AUD-02: Closing modal via Swipe-down and Android Back stops active/paused simulation',
+      (tester) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: emulatorProvider,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // 1. Open and start simulation, then swipe down to dismiss
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        emulatorProvider.startSimulation();
+        await tester.pump();
+        expect(emulatorProvider.isSimulating, isTrue);
+
+        await tester.drag(
+          find.text('Simulator Telemetri (Port 5055)'),
+          const Offset(0, 600),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+        expect(emulatorProvider.isSimulating, isFalse);
+        expect(
+          emulatorProvider.simulationStatus,
+          equals(EmulatorSimulationStatus.idle),
+        );
+
+        // 2. Re-open, start & pause simulation, then Android Back dismisses & stops
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        emulatorProvider.startSimulation();
+        emulatorProvider.pauseSimulation();
+        await tester.pump();
+        expect(emulatorProvider.isPaused, isTrue);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+        expect(emulatorProvider.isPaused, isFalse);
+        expect(
+          emulatorProvider.simulationStatus,
+          equals(EmulatorSimulationStatus.idle),
+        );
+      },
+    );
+
+    testWidgets(
+      'TC-TES-16: AUD-02: Pilih di Peta preserves running simulation and edited form state',
+      (tester) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: emulatorProvider,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        emulatorProvider.updateCoordinates(lat: -6.9175, lon: 107.6191);
+        emulatorProvider.updateSpeed(55.0);
+        emulatorProvider.startSimulation();
+        await tester.pump();
+
+        final pickBtn = find.byKey(const Key('emulator_pick_on_map_button'));
+        await tester.ensureVisible(pickBtn);
+        await tester.tap(pickBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TelemetryEmulatorSheet), findsNothing);
+        expect(emulatorProvider.isMapPickMode, isTrue);
+        expect(emulatorProvider.isSimulating, isTrue);
+        expect(emulatorProvider.targetUniqueId, equals('TRONTON-99'));
+        expect(emulatorProvider.currentLat, closeTo(-6.9175, 0.0001));
+        expect(emulatorProvider.currentLon, closeTo(107.6191, 0.0001));
+        expect(emulatorProvider.currentSpeed, equals(55.0));
+
+        emulatorProvider.stopSimulation();
+      },
+    );
+
+    testWidgets(
+      'TC-TES-17: AUD-02: General popup dismiss (Dropdown menu selection) does NOT unintentionally stop simulation',
+      (tester) async {
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<TelemetryEmulatorProvider>.value(
+                value: emulatorProvider,
+              ),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (ctx) => ElevatedButton(
+                    key: const Key('open_emulator_sheet_button'),
+                    onPressed: () => TelemetryEmulatorSheet.show(
+                      ctx,
+                      initialDevice: tDevice1,
+                    ),
+                    child: const Text('Buka'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('open_emulator_sheet_button')));
+        await tester.pumpAndSettle();
+
+        emulatorProvider.startSimulation();
+        await tester.pump();
+        expect(emulatorProvider.isSimulating, isTrue);
+
+        // Open DropdownButtonFormField popup route and dismiss by picking item
+        final dropdown = find.byKey(const Key('emulator_device_dropdown'));
+        await tester.ensureVisible(dropdown);
+        await tester.tap(dropdown);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pickup Box B 5678 DEF (PICKUP-12)').last);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TelemetryEmulatorSheet), findsOneWidget);
+        expect(emulatorProvider.targetUniqueId, equals('PICKUP-12'));
+        expect(emulatorProvider.isSimulating, isTrue);
+
+        // Clean up active timer before test teardown
+        await tester.tap(find.byKey(const Key('emulator_sheet_close_button')));
+        await tester.pumpAndSettle();
+        expect(emulatorProvider.isSimulating, isFalse);
+      },
+    );
   });
 }

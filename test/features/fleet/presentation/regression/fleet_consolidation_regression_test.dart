@@ -27,11 +27,15 @@ class MockFleetRepository implements FleetRepository {
   Either<Failure, List<DeviceModel>> devicesResult = const Right([]);
   Either<Failure, List<PositionModel>> positionsResult = const Right([]);
   Either<Failure, List<GroupModel>> groupsResult = const Right([]);
+  int getDevicesCallCount = 0;
 
   @override
   Future<Either<Failure, List<DeviceModel>>> getDevices({
     CancelToken? cancelToken,
-  }) async => devicesResult;
+  }) async {
+    getDevicesCallCount++;
+    return devicesResult;
+  }
 
   @override
   Future<Either<Failure, List<PositionModel>>> getPositions({
@@ -49,6 +53,8 @@ class FakeWebSocketService extends TraccarWebSocketService {
       StreamController<WebSocketConnectionState>.broadcast();
   final _msgController = StreamController<Map<String, dynamic>>.broadcast();
   WebSocketConnectionState _state = WebSocketConnectionState.connected;
+  int connectCallCount = 0;
+  int disconnectCallCount = 0;
 
   FakeWebSocketService()
     : super(appConfig: const AppConfig(), cookieJar: SessionCookieJar());
@@ -71,10 +77,14 @@ class FakeWebSocketService extends TraccarWebSocketService {
   }
 
   @override
-  Future<void> connect() async {}
+  Future<void> connect() async {
+    connectCallCount++;
+  }
 
   @override
-  void disconnect() {}
+  void disconnect() {
+    disconnectCallCount++;
+  }
 
   @override
   void dispose() {
@@ -355,7 +365,133 @@ void main() {
         localWs.dispose();
       },
     );
+
+    testWidgets(
+      'REG-04: AUD-01: FleetShellScreen defers initial sync until authenticated, avoids duplicate ws.connect(), and resets coordinator on logout cleanly',
+      (tester) async {
+        mockRepo.devicesResult = Right([initialDevice]);
+        mockRepo.positionsResult = Right([initialPosition]);
+
+        final authRepo = _ControllableAuthRepository();
+        final authProvider = AuthProvider(authRepository: authRepo);
+
+        Widget buildShellApp() => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+            ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+            Provider<TraccarWebSocketService>.value(value: fakeWs),
+            ChangeNotifierProvider<InitialFleetSyncCoordinator>.value(
+              value: coordinator,
+            ),
+          ],
+          child: const MaterialApp(home: FleetShellScreen()),
+        );
+
+        // 1. Mount before authentication completes -> ZERO premature sync or WS connect
+        await tester.pumpWidget(buildShellApp());
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(authProvider.isAuthenticated, isFalse);
+        expect(mockRepo.getDevicesCallCount, equals(0));
+        expect(fakeWs.connectCallCount, equals(0));
+        expect(liveFleet.devices, isEmpty);
+
+        // 2. Complete authentication -> triggers InitialFleetSyncCoordinator once
+        final loggedIn = await authProvider.login(
+          email: 'admin@gps.local',
+          password: 'secret',
+        );
+        expect(loggedIn, isTrue);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(mockRepo.getDevicesCallCount, equals(1));
+        expect(fakeWs.connectCallCount, equals(1));
+        expect(coordinator.isReady, isTrue);
+        expect(liveFleet.devices[77]?.uniqueId, equals('EMERGENCY-01'));
+        expect(liveFleet.positions[77]?.id, equals(7001));
+
+        // 3. Logout resets coordinator & clears fleet without breaking singleton lifecycle
+        await tester.tap(find.byKey(const Key('fleet_app_bar_logout_button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(fakeWs.disconnectCallCount, equals(1));
+        expect(liveFleet.devices, isEmpty);
+        expect(coordinator.syncState, equals(FleetSyncState.notInitialized));
+        expect(authProvider.isAuthenticated, isFalse);
+
+        // 4. Re-login -> coordinator synchronizes cleanly again once
+        await authProvider.login(email: 'admin@gps.local', password: 'secret');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(mockRepo.getDevicesCallCount, equals(2));
+        expect(fakeWs.connectCallCount, equals(2));
+        expect(liveFleet.devices[77]?.uniqueId, equals('EMERGENCY-01'));
+
+        authProvider.dispose();
+      },
+    );
+
+    testWidgets(
+      'REG-05: AUD-01 Fallback: FleetShellScreen connects WebSocket directly only when InitialFleetSyncCoordinator is unavailable',
+      (tester) async {
+        final authProvider = AuthProvider(
+          authRepository: _DummyAuthRepository(),
+        );
+
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+              ChangeNotifierProvider<LiveFleetProvider>.value(value: liveFleet),
+              Provider<TraccarWebSocketService>.value(value: fakeWs),
+            ],
+            child: const MaterialApp(home: FleetShellScreen()),
+          ),
+        );
+        await tester.pump();
+
+        expect(fakeWs.connectCallCount, equals(1));
+        authProvider.dispose();
+      },
+    );
   });
+}
+
+class _ControllableAuthRepository implements AuthRepository {
+  static const _adminUser = UserModel(
+    id: 1,
+    name: 'Admin',
+    email: 'admin@gps.local',
+    administrator: true,
+    readonly: false,
+  );
+
+  @override
+  Future<Either<Failure, UserModel>> login({
+    required String email,
+    required String password,
+    String? code,
+    bool rememberMe = false,
+  }) async => const Right(_adminUser);
+
+  @override
+  Future<Either<Failure, void>> logout() async => const Right(null);
+
+  @override
+  Future<Either<Failure, UserModel>> getCurrentSession() async =>
+      const Right(_adminUser);
+
+  @override
+  Future<Either<Failure, ({String? email, String? password, bool rememberMe})>>
+  getSavedCredentials() async =>
+      const Right((email: null, password: null, rememberMe: false));
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async =>
+      const Right(null);
 }
 
 class _DummyAuthRepository implements AuthRepository {
